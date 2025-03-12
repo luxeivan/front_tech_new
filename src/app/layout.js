@@ -1,5 +1,10 @@
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { AntdRegistry } from "@ant-design/nextjs-registry";
+import AppHeader from "@/components/global/AppHeader";
+import Footer from "@/components/global/Footer";
+import { Flex } from 'antd'
+import '@ant-design/v5-patch-for-react-19';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -18,9 +23,17 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
+    <html lang="ru">
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
-        {children}
+        <AntdRegistry>
+          <Flex vertical style={{minHeight:"100vh"}}>
+            <AppHeader />
+            <div style={{ flex: 1 }}>
+              {children}
+            </div>
+            <Footer />
+          </Flex>
+        </AntdRegistry>
       </body>
     </html>
   );
