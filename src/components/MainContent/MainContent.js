@@ -340,7 +340,7 @@ export default function MainContent() {
               }}
             >
               <Typography.Text strong>
-                Активных активных инцидентов: {activeIncidentsCount}
+                Активных инцидентов: {activeIncidentsCount}
               </Typography.Text>
               <br />
             </div>
