@@ -2,13 +2,16 @@
 import { LockOutlined, UserOutlined } from "@ant-design/icons";
 import { Button, Form, Input, Alert } from "antd";
 import useAuthStore from "@/stores/authStore";
+import { useSession, signIn, signOut } from "next-auth/react"
 
-const AuthForm = ({closeModal}) => {
+const AuthForm = ({ closeModal }) => {
   const { login, error, loading } = useAuthStore();
-  
+
+
 
   const onFinish = async (values) => {
-    await login(values.identifier, values.password);
+    signIn('credentials', { identifier: values.identifier, password: values.password })
+    // await login(values.identifier, values.password);
   };
 
   return (
@@ -48,7 +51,7 @@ const AuthForm = ({closeModal}) => {
           </Button>
         </Form.Item>
         <Form.Item>
-          <Button block size="large" onClick={()=>closeModal()}>Закрыть</Button>
+          <Button block size="large" onClick={() => closeModal()}>Закрыть</Button>
         </Form.Item>
       </Form>
     </div>
