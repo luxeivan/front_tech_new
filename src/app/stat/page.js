@@ -1,5 +1,5 @@
-"use client";
-import React, { useEffect } from "react";
+// "use client";
+import React from "react";
 import { Typography, ConfigProvider, Spin, Alert, Flex, Space } from "antd";
 import ru_RU from "antd/locale/ru_RU";
 import dayjs from "dayjs";
@@ -54,11 +54,11 @@ export default function Stat() {
     calculate,
   } = useStatStore();
 
-  useEffect(() => {
-    if (token && incidents.length === 0) {
-      fetchIncidents(token);
-    }
-  }, [token, incidents, fetchIncidents]);
+  // useEffect(() => {
+  //   if (token && incidents.length === 0) {
+  //     fetchIncidents(token);
+  //   }
+  // }, [token, incidents, fetchIncidents]);
 
   const uniqueCities = React.useMemo(() => {
     const citySet = new Set();
