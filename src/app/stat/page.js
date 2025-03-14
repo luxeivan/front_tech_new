@@ -1,50 +1,58 @@
 "use client";
-import React, { useState, useEffect } from "react";
-import {
-  Typography,
-  Select,
-  Checkbox,
-  Space,
-  ConfigProvider,
-  Spin,
-  Alert,
-  Flex,
-} from "antd";
+import React, { useEffect } from "react";
+import { Typography, ConfigProvider, Spin, Alert, Flex, Space } from "antd";
 import ru_RU from "antd/locale/ru_RU";
 import dayjs from "dayjs";
 import customParseFormat from "dayjs/plugin/customParseFormat";
 import isBetween from "dayjs/plugin/isBetween";
 import "dayjs/locale/ru";
 
+const { Title } = Typography;
+
 dayjs.extend(customParseFormat);
 dayjs.extend(isBetween);
 dayjs.locale("ru");
 
 import { useIncidentsDataStore } from "@/stores/incidentsDataStore";
+import useStatStore from "@/stores/statStore";
 import useAuthStore from "@/stores/authStore";
 
 // Клиентские компоненты
 import ButtonStatStart from "@/components/client/stat/ButtonStatStart";
 import ButtonStatBack from "@/components/client/stat/ButtonStatBack";
-import InputDate from "@/components/client/stat/InputDate";
+import StatFilters from "@/components/client/stat/StatFilters";
 
 // Серверные компоненты
 import StatResults from "@/components/server/stat/StatResults";
 import StatChart from "@/components/server/stat/StatChart";
 
-const { Title } = Typography;
-const { Option } = Select;
+
+const metricOptions = [
+  { label: "Количество инцидентов", value: "countIncidents" },
+  { label: "Отключено жителей", value: "affectedResidents" },
+  { label: "Отключено МКД", value: "affectedMkd" },
+  { label: "Отключено больниц", value: "affectedHospitals" },
+  { label: "Отключено поликлиник", value: "affectedClinics" },
+];
 
 export default function Stat() {
   const { token } = useAuthStore();
   const { incidents, loading, error, fetchIncidents } = useIncidentsDataStore();
 
-  const [dateRange, setDateRange] = useState(null);
-  const [selectedCity, setSelectedCity] = useState("Все");
-  const [selectedStatus, setSelectedStatus] = useState("Все");
-  const [selectedMetrics, setSelectedMetrics] = useState([]);
-  const [results, setResults] = useState({});
-  const [chartData, setChartData] = useState([]);
+  // Подключаем store для статистики
+  const {
+    dateRange,
+    setDateRange,
+    selectedCity,
+    setSelectedCity,
+    selectedStatus,
+    setSelectedStatus,
+    selectedMetrics,
+    setSelectedMetrics,
+    results,
+    chartData,
+    calculate,
+  } = useStatStore();
 
   useEffect(() => {
     if (token && incidents.length === 0) {
@@ -63,110 +71,8 @@ export default function Stat() {
     return ["Все", ...citySet];
   }, [incidents]);
 
-  const metricOptions = [
-    { label: "Количество инцидентов", value: "countIncidents" },
-    { label: "Отключено жителей", value: "affectedResidents" },
-    { label: "Отключено МКД", value: "affectedMkd" },
-    { label: "Отключено больниц", value: "affectedHospitals" },
-    { label: "Отключено поликлиник", value: "affectedClinics" },
-  ];
-
   const handleCalculate = () => {
-    let filtered = incidents;
-
-    if (selectedCity !== "Все") {
-      filtered = filtered.filter((inc) => {
-        const cityName = inc.AddressInfo?.city_district?.name?.trim() || "";
-        return cityName === selectedCity;
-      });
-    }
-
-    if (selectedStatus !== "Все") {
-      filtered = filtered.filter(
-        (inc) => inc.status_incident?.trim() === selectedStatus
-      );
-    }
-
-    if (dateRange && dateRange[0] && dateRange[1]) {
-      const [start, end] = dateRange;
-      filtered = filtered.filter((inc) => {
-        const incDate = dayjs(inc.start_date, "YYYY-MM-DD");
-        return incDate.isBetween(start, end, "day", "[]");
-      });
-    }
-
-    const newResults = {};
-    if (selectedMetrics.includes("countIncidents")) {
-      newResults.countIncidents = filtered.length;
-    }
-    if (selectedMetrics.includes("affectedResidents")) {
-      let sum = 0;
-      filtered.forEach((inc) => {
-        if (inc.DisruptionStats) {
-          sum += parseInt(inc.DisruptionStats.affected_residents || "0", 10);
-        }
-      });
-      newResults.affectedResidents = sum;
-    }
-    if (selectedMetrics.includes("affectedMkd")) {
-      let sum = 0;
-      filtered.forEach((inc) => {
-        if (inc.DisruptionStats) {
-          sum += parseInt(inc.DisruptionStats.affected_mkd || "0", 10);
-        }
-      });
-      newResults.affectedMkd = sum;
-    }
-    if (selectedMetrics.includes("affectedHospitals")) {
-      let sum = 0;
-      filtered.forEach((inc) => {
-        if (inc.DisruptionStats) {
-          sum += parseInt(inc.DisruptionStats.affected_hospitals || "0", 10);
-        }
-      });
-      newResults.affectedHospitals = sum;
-    }
-    if (selectedMetrics.includes("affectedClinics")) {
-      let sum = 0;
-      filtered.forEach((inc) => {
-        if (inc.DisruptionStats) {
-          sum += parseInt(inc.DisruptionStats.affected_clinics || "0", 10);
-        }
-      });
-      newResults.affectedClinics = sum;
-    }
-    setResults(newResults);
-
-    if (
-      selectedMetrics.includes("countIncidents") &&
-      dateRange &&
-      dateRange[0] &&
-      dateRange[1]
-    ) {
-      const [start, end] = dateRange;
-      let chartObj = {};
-      let current = start.startOf("day");
-      const endDay = end.endOf("day");
-      while (current.isBefore(endDay) || current.isSame(endDay)) {
-        chartObj[current.format("DD.MM.YYYY")] = 0;
-        current = current.add(1, "day");
-      }
-      filtered.forEach((inc) => {
-        const dateKey = dayjs(inc.start_date, "YYYY-MM-DD").format(
-          "DD.MM.YYYY"
-        );
-        if (chartObj.hasOwnProperty(dateKey)) {
-          chartObj[dateKey] += 1;
-        }
-      });
-      const chartArray = Object.keys(chartObj).map((dateKey) => ({
-        date: dateKey,
-        count: chartObj[dateKey],
-      }));
-      setChartData(chartArray);
-    } else {
-      setChartData([]);
-    }
+    calculate(incidents);
   };
 
   if (loading) {
@@ -192,33 +98,17 @@ export default function Stat() {
           <ButtonStatBack />
         </Flex>
         <Space direction="vertical" size="large" style={{ width: "100%" }}>
-          <Space wrap>
-            <InputDate value={dateRange} onChange={setDateRange} />
-            <Select
-              style={{ width: 200 }}
-              value={selectedCity}
-              onChange={(val) => setSelectedCity(val)}
-            >
-              {uniqueCities.map((city) => (
-                <Option key={city} value={city}>
-                  {city}
-                </Option>
-              ))}
-            </Select>
-            <Select
-              style={{ width: 200 }}
-              value={selectedStatus}
-              onChange={(val) => setSelectedStatus(val)}
-            >
-              <Option value="Все">Все</Option>
-              <Option value="в работе">В работе</Option>
-              <Option value="выполнена">Выполненные</Option>
-            </Select>
-          </Space>
-          <Checkbox.Group
-            options={metricOptions}
-            value={selectedMetrics}
-            onChange={(vals) => setSelectedMetrics(vals)}
+          <StatFilters
+            dateRange={dateRange}
+            onDateRangeChange={setDateRange}
+            uniqueCities={uniqueCities}
+            selectedCity={selectedCity}
+            onCityChange={setSelectedCity}
+            selectedStatus={selectedStatus}
+            onStatusChange={setSelectedStatus}
+            metricOptions={metricOptions}
+            selectedMetrics={selectedMetrics}
+            onMetricsChange={setSelectedMetrics}
           />
           <ButtonStatStart onCalculate={handleCalculate} />
         </Space>
@@ -228,6 +118,210 @@ export default function Stat() {
     </ConfigProvider>
   );
 }
+
+// "use client";
+// import React, { useState, useEffect } from "react";
+// import { Typography, ConfigProvider, Spin, Alert, Flex, Space } from "antd";
+// import ru_RU from "antd/locale/ru_RU";
+// import dayjs from "dayjs";
+// import customParseFormat from "dayjs/plugin/customParseFormat";
+// import isBetween from "dayjs/plugin/isBetween";
+// import "dayjs/locale/ru";
+
+// dayjs.extend(customParseFormat);
+// dayjs.extend(isBetween);
+// dayjs.locale("ru");
+
+// import { useIncidentsDataStore } from "@/stores/incidentsDataStore";
+// import useAuthStore from "@/stores/authStore";
+
+// // Клиентские компоненты
+// import ButtonStatStart from "@/components/client/stat/ButtonStatStart";
+// import ButtonStatBack from "@/components/client/stat/ButtonStatBack";
+// import StatFilters from "@/components/client/stat/StatFilters";
+
+// // Серверные компоненты
+// import StatResults from "@/components/server/stat/StatResults";
+// import StatChart from "@/components/server/stat/StatChart";
+
+// const { Title } = Typography;
+// const metricOptions = [
+//   { label: "Количество инцидентов", value: "countIncidents" },
+//   { label: "Отключено жителей", value: "affectedResidents" },
+//   { label: "Отключено МКД", value: "affectedMkd" },
+//   { label: "Отключено больниц", value: "affectedHospitals" },
+//   { label: "Отключено поликлиник", value: "affectedClinics" },
+// ];
+
+// export default function Stat() {
+//   const { token } = useAuthStore();
+//   const { incidents, loading, error, fetchIncidents } = useIncidentsDataStore();
+
+//   const [dateRange, setDateRange] = useState(null);
+//   const [selectedCity, setSelectedCity] = useState("Все");
+//   const [selectedStatus, setSelectedStatus] = useState("Все");
+//   const [selectedMetrics, setSelectedMetrics] = useState([]);
+//   const [results, setResults] = useState({});
+//   const [chartData, setChartData] = useState([]);
+
+//   useEffect(() => {
+//     if (token && incidents.length === 0) {
+//       fetchIncidents(token);
+//     }
+//   }, [token, incidents, fetchIncidents]);
+
+//   const uniqueCities = React.useMemo(() => {
+//     const citySet = new Set();
+//     incidents.forEach((inc) => {
+//       const cityName = inc.AddressInfo?.city_district?.name;
+//       if (cityName) {
+//         citySet.add(cityName.trim());
+//       }
+//     });
+//     return ["Все", ...citySet];
+//   }, [incidents]);
+
+//   const handleCalculate = () => {
+//     let filtered = incidents;
+
+//     if (selectedCity !== "Все") {
+//       filtered = filtered.filter((inc) => {
+//         const cityName = inc.AddressInfo?.city_district?.name?.trim() || "";
+//         return cityName === selectedCity;
+//       });
+//     }
+
+//     if (selectedStatus !== "Все") {
+//       filtered = filtered.filter(
+//         (inc) => inc.status_incident?.trim() === selectedStatus
+//       );
+//     }
+
+//     if (dateRange && dateRange[0] && dateRange[1]) {
+//       const [start, end] = dateRange;
+//       filtered = filtered.filter((inc) => {
+//         const incDate = dayjs(inc.start_date, "YYYY-MM-DD");
+//         return incDate.isBetween(start, end, "day", "[]");
+//       });
+//     }
+
+//     const newResults = {};
+//     if (selectedMetrics.includes("countIncidents")) {
+//       newResults.countIncidents = filtered.length;
+//     }
+//     if (selectedMetrics.includes("affectedResidents")) {
+//       let sum = 0;
+//       filtered.forEach((inc) => {
+//         if (inc.DisruptionStats) {
+//           sum += parseInt(inc.DisruptionStats.affected_residents || "0", 10);
+//         }
+//       });
+//       newResults.affectedResidents = sum;
+//     }
+//     if (selectedMetrics.includes("affectedMkd")) {
+//       let sum = 0;
+//       filtered.forEach((inc) => {
+//         if (inc.DisruptionStats) {
+//           sum += parseInt(inc.DisruptionStats.affected_mkd || "0", 10);
+//         }
+//       });
+//       newResults.affectedMkd = sum;
+//     }
+//     if (selectedMetrics.includes("affectedHospitals")) {
+//       let sum = 0;
+//       filtered.forEach((inc) => {
+//         if (inc.DisruptionStats) {
+//           sum += parseInt(inc.DisruptionStats.affected_hospitals || "0", 10);
+//         }
+//       });
+//       newResults.affectedHospitals = sum;
+//     }
+//     if (selectedMetrics.includes("affectedClinics")) {
+//       let sum = 0;
+//       filtered.forEach((inc) => {
+//         if (inc.DisruptionStats) {
+//           sum += parseInt(inc.DisruptionStats.affected_clinics || "0", 10);
+//         }
+//       });
+//       newResults.affectedClinics = sum;
+//     }
+//     setResults(newResults);
+
+//     if (
+//       selectedMetrics.includes("countIncidents") &&
+//       dateRange &&
+//       dateRange[0] &&
+//       dateRange[1]
+//     ) {
+//       const [start, end] = dateRange;
+//       let chartObj = {};
+//       let current = start.startOf("day");
+//       const endDay = end.endOf("day");
+//       while (current.isBefore(endDay) || current.isSame(endDay)) {
+//         chartObj[current.format("DD.MM.YYYY")] = 0;
+//         current = current.add(1, "day");
+//       }
+//       filtered.forEach((inc) => {
+//         const dateKey = dayjs(inc.start_date, "YYYY-MM-DD").format(
+//           "DD.MM.YYYY"
+//         );
+//         if (chartObj.hasOwnProperty(dateKey)) {
+//           chartObj[dateKey] += 1;
+//         }
+//       });
+//       const chartArray = Object.keys(chartObj).map((dateKey) => ({
+//         date: dateKey,
+//         count: chartObj[dateKey],
+//       }));
+//       setChartData(chartArray);
+//     } else {
+//       setChartData([]);
+//     }
+//   };
+
+//   if (loading) {
+//     return (
+//       <div style={{ marginTop: 50, textAlign: "center" }}>
+//         <Spin size="large" />
+//       </div>
+//     );
+//   }
+//   if (error) {
+//     return (
+//       <div style={{ marginTop: 50 }}>
+//         <Alert type="error" message={error} />
+//       </div>
+//     );
+//   }
+
+//   return (
+//     <ConfigProvider locale={ru_RU}>
+//       <div style={{ padding: 20 }}>
+//         <Flex justify={"space-between"}>
+//           <Title level={2}>Статистика</Title>
+//           <ButtonStatBack />
+//         </Flex>
+//         <Space direction="vertical" size="large" style={{ width: "100%" }}>
+//           <StatFilters
+//             dateRange={dateRange}
+//             onDateRangeChange={setDateRange}
+//             uniqueCities={uniqueCities}
+//             selectedCity={selectedCity}
+//             onCityChange={setSelectedCity}
+//             selectedStatus={selectedStatus}
+//             onStatusChange={setSelectedStatus}
+//             metricOptions={metricOptions}
+//             selectedMetrics={selectedMetrics}
+//             onMetricsChange={setSelectedMetrics}
+//           />
+//           <ButtonStatStart onCalculate={handleCalculate} />
+//         </Space>
+//         <StatChart chartData={chartData} />
+//         <StatResults results={results} selectedMetrics={selectedMetrics} />
+//       </div>
+//     </ConfigProvider>
+//   );
+// }
 
 // "use client";
 // import React, { useState, useEffect } from "react";
