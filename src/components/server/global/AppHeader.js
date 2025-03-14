@@ -1,13 +1,11 @@
 import Image from "next/image";
-import logoBlue from '@/img/logoBlue.svg'
+import logoBlue from "@/img/logoBlue.svg";
 import { Header } from "antd/es/layout/layout";
 import ButtonLogInOut from "@/components/client/global/ButtonLogInOut";
 import { auth } from "@/config/auth";
 
 export default async function AppHeader() {
-  const session = await auth()
-  // const { token, logout, isOpenModalAuth, openModal, closeModal } = useAuthStore();
-  // console.log(session)
+  const session = await auth();
   return (
     <Header
       style={{
@@ -28,15 +26,7 @@ export default async function AppHeader() {
           style={{ objectFit: "contain" }}
         />
       </div>
-
-      {/* {token && (
-        <Button type="primary" danger onClick={logout}>
-          Выйти
-        </Button>
-      )} */}
-
       <ButtonLogInOut />
-
     </Header>
   );
 }
