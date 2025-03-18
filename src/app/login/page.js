@@ -3,7 +3,7 @@ import React, { useState } from "react";
 import { Button, Form, Input, Flex } from "antd";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import BoxLoader from "@/components/client/preloader/BoxLoader";
+import PortalAnime from "@/components/client/preloader/PortalAnime";
 
 export default function Login() {
   const [loadingAuth, setLoadingAuth] = useState(false);
@@ -24,7 +24,7 @@ export default function Login() {
         setShowPreloader(true);
         setTimeout(() => {
           router.push("/");
-        }, 3000);
+        }, 5000);
       } else {
         console.log("Ошибка авторизации:", result?.error);
       }
@@ -37,7 +37,7 @@ export default function Login() {
   if (showPreloader) {
     return (
       <Flex justify="center" vertical align="center" style={{ marginTop: 50 }}>
-        <BoxLoader />
+        <PortalAnime />;
       </Flex>
     );
   }
