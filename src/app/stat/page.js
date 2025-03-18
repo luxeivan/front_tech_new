@@ -18,14 +18,12 @@ import useStatStore from "@/stores/statStore";
 import useAuthStore from "@/stores/authStore";
 
 // Клиентские компоненты
-import ButtonStatStart from "@/components/client/stat/ButtonStatStart";
-import ButtonStatBack from "@/components/client/stat/ButtonStatBack";
+import ButtonStat from "@/components/client/stat/ButtonStat";
 import StatFilters from "@/components/client/stat/StatFilters";
 
 // Серверные компоненты
 import StatResults from "@/components/server/stat/StatResults";
 import StatChart from "@/components/server/stat/StatChart";
-
 
 const metricOptions = [
   { label: "Количество инцидентов", value: "countIncidents" },
@@ -95,7 +93,7 @@ export default function Stat() {
       <div style={{ padding: 20 }}>
         <Flex justify={"space-between"}>
           <Title level={2}>Статистика</Title>
-          <ButtonStatBack />
+          <ButtonStat variant="back" href="/" />
         </Flex>
         <Space direction="vertical" size="large" style={{ width: "100%" }}>
           <StatFilters
@@ -110,7 +108,8 @@ export default function Stat() {
             selectedMetrics={selectedMetrics}
             onMetricsChange={setSelectedMetrics}
           />
-          <ButtonStatStart onCalculate={handleCalculate} />
+    
+          <ButtonStat variant="start" onClick={handleCalculate} />
         </Space>
         <StatChart chartData={chartData} />
         <StatResults results={results} selectedMetrics={selectedMetrics} />
