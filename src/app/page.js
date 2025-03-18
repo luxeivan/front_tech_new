@@ -11,7 +11,7 @@ export default async function Home() {
       {session && (
         <>
           <h1 style={{ textAlign: "center" }}>
-            Добро пожаловать {session.user?.name}
+            Добро пожаловать, {session.user?.name}
           </h1>
           <MainContent />
         </>
