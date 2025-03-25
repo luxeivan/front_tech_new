@@ -1,22 +1,21 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   Modal,
   Form,
   Input,
   DatePicker,
   TimePicker,
-  Select,
   message,
   Button,
   InputNumber,
   Typography,
   Descriptions,
   ConfigProvider,
+  Select,
+  AutoComplete,
 } from "antd";
-
 import ru_RU from "antd/locale/ru_RU";
-
 import dayjs from "dayjs";
 import customParseFormat from "dayjs/plugin/customParseFormat";
 import "dayjs/locale/ru";
@@ -29,39 +28,39 @@ import useNewIncidentStore from "@/stores/newIncidentStore";
 const { Option } = Select;
 const { Title } = Typography;
 
+/**
+ * Функция для получения подсказок с нашего прокси /api/dadata
+ * @param {string} query - поисковый запрос
+ * @returns {Promise<Array>} массив подсказок DaData
+ */
+async function fetchDadataSuggestions(query) {
+  if (!query) return [];
+  const res = await fetch(`/api/dadata?query=${encodeURIComponent(query)}`);
+  const json = await res.json();
+  if (json.status === "ok") {
+    return json.data; // массив { value, data: {...} }
+  } else {
+    console.error("Ошибка при запросе /api/dadata:", json);
+    return [];
+  }
+}
+
 export default function NewIncidentModal({ visible, onCancel, form }) {
-  // Если form передается извне, используем его; если нет – создаём новый
+  // ======== antd Form ========
   const [localForm] = Form.useForm();
   const usedForm = form || localForm;
 
+  // ======== zustand store ========
   const { token } = useAuthStore();
-  const [cityDistricts, setCityDistricts] = useState([]);
-
-  // Получаем функции из нового store
   const { fillFormWithMagic, sendMultipleIncidents } = useNewIncidentStore();
 
-  // При открытии модалки грузим список городов и устанавливаем дефолтные поля
-  useEffect(() => {
-    const fetchCityDistricts = async () => {
-      try {
-        const res = await fetch(
-          `${process.env.NEXT_PUBLIC_STRAPI_URL}/api/city-districts`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        );
-        if (!res.ok) {
-          throw new Error(`Ошибка при загрузке городов: ${res.status}`);
-        }
-        const data = await res.json();
-        setCityDistricts(data.data || []);
-      } catch (err) {
-        console.error("Ошибка загрузки city-districts:", err);
-      }
-    };
+  // ======== Локальные стейты для автокомплита ========
+  const [citySearch, setCitySearch] = useState(""); // то, что пользователь ввёл
+  const [cityOptions, setCityOptions] = useState([]); // подсказки (options для AutoComplete)
 
+  // При открытии модалки сбрасываем поля
+  useEffect(() => {
     if (visible) {
-      fetchCityDistricts();
       usedForm.setFieldsValue({
         start_date: dayjs(),
         start_time: dayjs(),
@@ -77,10 +76,63 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
           affected_kindergartens: 0,
           boiler_shutdown: 0,
         },
+        addressInfo: {
+          settlement_type: "городской",
+          building_type: "жилой сектор",
+          city_name: "", // начальное значение
+          city_fias_id: "",
+          street_name: "",
+        },
       });
+      // Сбрасываем локальный input
+      setCitySearch("");
+      setCityOptions([]);
     }
-  }, [visible, usedForm, token]);
+  }, [visible, usedForm]);
 
+  /**
+   * Обработка ввода в поле "Населенный пункт"
+   * @param {string} value - введённый текст
+   */
+  const handleCitySearch = useCallback(async (value) => {
+    setCitySearch(value);
+    if (value.length < 2) {
+      // Если мало символов, не шлём запрос
+      setCityOptions([]);
+      return;
+    }
+    try {
+      const suggestions = await fetchDadataSuggestions(value);
+      // Превращаем suggestions в формат [{value: '...', label: '...'}, ...]
+      const options = suggestions.map((item) => ({
+        // Для AutoComplete значение = item.value
+        value: item.value,
+        label: item.value,
+        // Сохраним объект data, чтобы потом достать fias
+        fias: item.data.city_fias_id || item.data.fias_id,
+        city: item.data.city, // может быть undefined, тогда item.value
+      }));
+      setCityOptions(options);
+    } catch (error) {
+      console.error("Ошибка в handleCitySearch:", error);
+      setCityOptions([]);
+    }
+  }, []);
+
+  /**
+   * Обработка выбора пункта из выпадающего списка
+   * @param {string} selectedValue - то, что выбрали
+   * @param {object} option - объект с value, label, fias, city
+   */
+  const handleCitySelect = (selectedValue, option) => {
+    // Обновим форму: city_name и city_fias_id
+    usedForm.setFieldValue(["addressInfo", "city_name"], selectedValue);
+    usedForm.setFieldValue(["addressInfo", "city_fias_id"], option.fias || "");
+    // Сохраним выбранное значение в state
+    setCitySearch(selectedValue);
+  };
+
+  // ======== Нажатие на "ОК" (Отправить) ========
   const handleOk = async () => {
     try {
       const values = await usedForm.validateFields();
@@ -95,6 +147,7 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
         `${est_date}T${est_time}`
       ).toISOString();
 
+      // Статистика отключения
       const ds = values.disruptionStats || {};
       const disruptionStats = {
         affected_settlements: ds.affected_settlements || 0,
@@ -107,11 +160,20 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
         boiler_shutdown: ds.boiler_shutdown || 0,
       };
 
-      const cityDistrictId = values.addressInfo?.city_district || null;
+      // Адресная информация
+      const addressInfo = {
+        city_fias_id: values.addressInfo?.city_fias_id || "",
+        city_name: values.addressInfo?.city_name || "",
+        settlement_type: values.addressInfo?.settlement_type,
+        building_type: values.addressInfo?.building_type,
+        street_name: values.addressInfo?.street_name || "",
+      };
+
+      // Описание (rich text для Strapi)
       const description = [
         {
           type: "paragraph",
-          children: [{ type: "text", text: values.description }],
+          children: [{ type: "text", text: values.description || "" }],
         },
       ];
 
@@ -122,12 +184,7 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
           status_incident: "в работе",
           estimated_restoration_time,
           description,
-          AddressInfo: {
-            city_district: cityDistrictId,
-            settlement_type: values.addressInfo?.settlement_type,
-            streets: values.addressInfo?.streets,
-            building_type: values.addressInfo?.building_type,
-          },
+          AddressInfo: addressInfo,
           DisruptionStats: disruptionStats,
           sent_to_telegram: false,
           sent_to_arm_edds: false,
@@ -163,16 +220,16 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
     }
   };
 
-  // Отправка 1 инцидента через store
+  // ======== «Заполнить» (магия) ========
   const handleMagic = () => {
-    fillFormWithMagic(usedForm, cityDistricts);
+    fillFormWithMagic(usedForm);
     message.info("Случайные данные заполнены!");
   };
 
-  // Отправка 10 инцидентов через store
+  // ======== «Заполнить 10» ========
   const handleMagic10 = async () => {
     try {
-      await sendMultipleIncidents(token, cityDistricts);
+      await sendMultipleIncidents(token);
       message.success("10 ТН успешно созданы!");
       onCancel();
       usedForm.resetFields();
@@ -255,18 +312,26 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
             Адресная информация
           </Title>
 
+          {/* Поле "Населенный пункт" с автокомплитом */}
           <Form.Item
-            name={["addressInfo", "city_district"]}
             label="Населенный пункт"
-            rules={[{ required: true, message: "Выберите город" }]}
+            name={["addressInfo", "city_name"]}
+            rules={[{ required: true, message: "Укажите населенный пункт" }]}
           >
-            <Select placeholder="Выберите населенный пункт">
-              {cityDistricts.map((city) => (
-                <Option key={city.id} value={city.documentId}>
-                  {city.name}
-                </Option>
-              ))}
-            </Select>
+            <AutoComplete
+              value={citySearch}
+              onSearch={handleCitySearch}
+              onSelect={handleCitySelect}
+              options={cityOptions}
+              placeholder="Начните вводить город Московской области"
+              allowClear
+              style={{ width: "100%" }}
+            />
+          </Form.Item>
+
+          {/* Скрытое поле для city_fias_id */}
+          <Form.Item name={["addressInfo", "city_fias_id"]} hidden>
+            <Input />
           </Form.Item>
 
           <Form.Item
@@ -282,11 +347,10 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
           </Form.Item>
 
           <Form.Item
-            name={["addressInfo", "streets"]}
-            label="Отключенные улицы"
-            rules={[{ required: true, message: "Укажите улицы" }]}
+            name={["addressInfo", "street_name"]}
+            label="Улица (при необходимости)"
           >
-            <Input placeholder="Введите улицы, разделённые запятыми" />
+            <Input placeholder="Введите улицу или несколько улиц" />
           </Form.Item>
 
           <Form.Item
@@ -420,10 +484,8 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
 //   ConfigProvider,
 // } from "antd";
 
-// // Русская локаль для antd
 // import ru_RU from "antd/locale/ru_RU";
 
-// // Подключаем Day.js + плагины
 // import dayjs from "dayjs";
 // import customParseFormat from "dayjs/plugin/customParseFormat";
 // import "dayjs/locale/ru";
@@ -431,31 +493,36 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
 // dayjs.extend(customParseFormat);
 
 // import useAuthStore from "@/stores/authStore";
-// import { getRandomNewIncidentFields } from "@/utils/magicFill";
+// import useNewIncidentStore from "@/stores/newIncidentStore";
 
 // const { Option } = Select;
 // const { Title } = Typography;
 
-// export default function NewIncidentModal({ visible, onCancel }) {
-//   const [form] = Form.useForm();
-//   const { token } = useAuthStore();
+// export default function NewIncidentModal({ visible, onCancel, form }) {
+//   // Если form передается извне, используем его; если нет – создаём новый
+//   const [localForm] = Form.useForm();
+//   const usedForm = form || localForm;
 
-//   // Список городов (CityDistrict)
+//   const { token } = useAuthStore();
 //   const [cityDistricts, setCityDistricts] = useState([]);
 
-//   // При открытии модалки грузим список городов и ставим дефолтные поля
+//   // Получаем функции из нового store
+//   const { fillFormWithMagic, sendMultipleIncidents } = useNewIncidentStore();
+
+//   // При открытии модалки грузим список городов и устанавливаем дефолтные поля
 //   useEffect(() => {
 //     const fetchCityDistricts = async () => {
 //       try {
 //         const res = await fetch(
-//           `${process.env.NEXT_PUBLIC_STRAPI_URL}/api/city-districts`, {
-//           headers: { Authorization: `Bearer ${token}` },
-//         });
+//           `${process.env.NEXT_PUBLIC_STRAPI_URL}/api/city-districts`,
+//           {
+//             headers: { Authorization: `Bearer ${token}` },
+//           }
+//         );
 //         if (!res.ok) {
 //           throw new Error(`Ошибка при загрузке городов: ${res.status}`);
 //         }
 //         const data = await res.json();
-
 //         setCityDistricts(data.data || []);
 //       } catch (err) {
 //         console.error("Ошибка загрузки city-districts:", err);
@@ -464,11 +531,9 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
 
 //     if (visible) {
 //       fetchCityDistricts();
-
-//       // Устанавливаем поля по умолчанию (Day.js)
-//       form.setFieldsValue({
-//         start_date: dayjs(), // Текущий день
-//         start_time: dayjs(), // Текущее время
+//       usedForm.setFieldsValue({
+//         start_date: dayjs(),
+//         start_time: dayjs(),
 //         estimated_restoration_date: dayjs().add(1, "day"),
 //         estimated_restoration_time: dayjs().add(2, "hour"),
 //         disruptionStats: {
@@ -483,18 +548,15 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
 //         },
 //       });
 //     }
-//   }, [visible, form, token]);
+//   }, [visible, usedForm, token]);
 
 //   const handleOk = async () => {
 //     try {
-//       const values = await form.validateFields();
+//       const values = await usedForm.validateFields();
 
-//       // Дата/время начала
-//       // Форматируем под нужный бэкенд: "YYYY-MM-DD" и "HH:mm:00.000"
+//       // Форматирование дат/времени
 //       const start_date = values.start_date.format("YYYY-MM-DD");
 //       const start_time = values.start_time.format("HH:mm") + ":00.000";
-
-//       // Прогноз восстановления
 //       const est_date = values.estimated_restoration_date.format("YYYY-MM-DD");
 //       const est_time =
 //         values.estimated_restoration_time.format("HH:mm") + ":00.000";
@@ -502,7 +564,6 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
 //         `${est_date}T${est_time}`
 //       ).toISOString();
 
-//       // DisruptionStats
 //       const ds = values.disruptionStats || {};
 //       const disruptionStats = {
 //         affected_settlements: ds.affected_settlements || 0,
@@ -516,8 +577,6 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
 //       };
 
 //       const cityDistrictId = values.addressInfo?.city_district || null;
-
-//       // Превращаем обычную строку в RichText-массив
 //       const description = [
 //         {
 //           type: "paragraph",
@@ -547,14 +606,16 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
 //       };
 
 //       const response = await fetch(
-//         `${process.env.NEXT_PUBLIC_STRAPI_URL}/api/incidents`, {
-//         method: "POST",
-//         headers: {
-//           "Content-Type": "application/json",
-//           Authorization: `Bearer ${token}`,
-//         },
-//         body: JSON.stringify(payload),
-//       });
+//         `${process.env.NEXT_PUBLIC_STRAPI_URL}/api/incidents`,
+//         {
+//           method: "POST",
+//           headers: {
+//             "Content-Type": "application/json",
+//             Authorization: `Bearer ${token}`,
+//           },
+//           body: JSON.stringify(payload),
+//         }
+//       );
 
 //       if (!response.ok) {
 //         throw new Error(`Ошибка при отправке данных: ${response.status}`);
@@ -564,73 +625,30 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
 //       console.log("Ответ Strapi:", result);
 //       message.success("ТН успешно создана!");
 //       onCancel();
-//       form.resetFields();
+//       usedForm.resetFields();
 //     } catch (error) {
 //       console.error("Ошибка при создании ТН:", error);
 //       message.error("Ошибка при создании ТН!");
 //     }
 //   };
 
+//   // Отправка 1 инцидента через store
 //   const handleMagic = () => {
-//     // Сначала получаем рандомные значения (дата, время, статистика и т.п.) - функция magicFill должна вернуть их в нужном виде
-//     const randomValues = getRandomNewIncidentFields();
-
-//     // Если нет disruptionStats в рандоме, добавим дефолты
-//     if (!randomValues.disruptionStats) {
-//       randomValues.disruptionStats = {
-//         affected_settlements: 0,
-//         affected_residents: 0,
-//         affected_mkd: 0,
-//         affected_hospitals: 0,
-//         affected_clinics: 0,
-//         affected_schools: 0,
-//         affected_kindergartens: 0,
-//         boiler_shutdown: 0,
-//       };
-//     }
-
-//     // Если в randomValues есть start_date (как строка), переводим в Day.js
-//     if (randomValues.start_date) {
-//       randomValues.start_date = dayjs(randomValues.start_date, "YYYY-MM-DD");
-//     } else {
-//       randomValues.start_date = dayjs();
-//     }
-//     if (randomValues.start_time) {
-//       randomValues.start_time = dayjs(randomValues.start_time, "HH:mm:ss.SSS");
-//     } else {
-//       randomValues.start_time = dayjs();
-//     }
-
-//     if (randomValues.estimated_restoration_date) {
-//       randomValues.estimated_restoration_date = dayjs(
-//         randomValues.estimated_restoration_date,
-//         "YYYY-MM-DD"
-//       );
-//     } else {
-//       randomValues.estimated_restoration_date = dayjs().add(1, "day");
-//     }
-//     if (randomValues.estimated_restoration_time) {
-//       randomValues.estimated_restoration_time = dayjs(
-//         randomValues.estimated_restoration_time,
-//         "HH:mm:ss.SSS"
-//       );
-//     } else {
-//       randomValues.estimated_restoration_time = dayjs().add(2, "hour");
-//     }
-
-//     // Если у нас есть список городов, подставим случайный
-//     if (cityDistricts.length > 0) {
-//       const randomIndex = Math.floor(Math.random() * cityDistricts.length);
-//       const randomCity = cityDistricts[randomIndex];
-//       // Подставляем реальный documentId города
-//       if (!randomValues.addressInfo) {
-//         randomValues.addressInfo = {};
-//       }
-//       randomValues.addressInfo.city_district = randomCity.documentId;
-//     }
-
-//     form.setFieldsValue(randomValues);
+//     fillFormWithMagic(usedForm, cityDistricts);
 //     message.info("Случайные данные заполнены!");
+//   };
+
+//   // Отправка 10 инцидентов через store
+//   const handleMagic10 = async () => {
+//     try {
+//       await sendMultipleIncidents(token, cityDistricts);
+//       message.success("10 ТН успешно созданы!");
+//       onCancel();
+//       usedForm.resetFields();
+//     } catch (error) {
+//       console.error("Ошибка при создании 10 ТН:", error);
+//       message.error("Ошибка при создании 10 ТН!");
+//     }
 //   };
 
 //   return (
@@ -643,8 +661,7 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
 //         okText="Отправить"
 //         cancelText="Отмена"
 //       >
-//         <Form form={form} layout="vertical">
-//           {/* Дата и время начала */}
+//         <Form form={usedForm} layout="vertical">
 //           <Form.Item
 //             name="start_date"
 //             label="Дата начала ТН"
@@ -669,7 +686,6 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
 //             />
 //           </Form.Item>
 
-//           {/* Прогноз восстановления */}
 //           <Form.Item
 //             name="estimated_restoration_date"
 //             label="Прогноз восстановления (дата)"
@@ -696,7 +712,6 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
 //             />
 //           </Form.Item>
 
-//           {/* Описание ТН */}
 //           <Form.Item
 //             name="description"
 //             label="Описание ТН"
@@ -770,25 +785,7 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
 //                 initialValue={0}
 //                 style={{ marginBottom: 0 }}
 //               >
-//                 <InputNumber
-//                   min={0}
-//                   max={999999}
-//                   onKeyDown={(e) => {
-//                     // Запрещаем ввод букв
-//                     if (
-//                       !/^\d$/.test(e.key) &&
-//                       ![
-//                         "Backspace",
-//                         "Delete",
-//                         "ArrowLeft",
-//                         "ArrowRight",
-//                         "Tab",
-//                       ].includes(e.key)
-//                     ) {
-//                       e.preventDefault();
-//                     }
-//                   }}
-//                 />
+//                 <InputNumber min={0} max={999999} />
 //               </Form.Item>
 //             </Descriptions.Item>
 
@@ -798,24 +795,7 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
 //                 initialValue={0}
 //                 style={{ marginBottom: 0 }}
 //               >
-//                 <InputNumber
-//                   min={0}
-//                   max={999999}
-//                   onKeyDown={(e) => {
-//                     if (
-//                       !/^\d$/.test(e.key) &&
-//                       ![
-//                         "Backspace",
-//                         "Delete",
-//                         "ArrowLeft",
-//                         "ArrowRight",
-//                         "Tab",
-//                       ].includes(e.key)
-//                     ) {
-//                       e.preventDefault();
-//                     }
-//                   }}
-//                 />
+//                 <InputNumber min={0} max={999999} />
 //               </Form.Item>
 //             </Descriptions.Item>
 
@@ -825,24 +805,7 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
 //                 initialValue={0}
 //                 style={{ marginBottom: 0 }}
 //               >
-//                 <InputNumber
-//                   min={0}
-//                   max={999999}
-//                   onKeyDown={(e) => {
-//                     if (
-//                       !/^\d$/.test(e.key) &&
-//                       ![
-//                         "Backspace",
-//                         "Delete",
-//                         "ArrowLeft",
-//                         "ArrowRight",
-//                         "Tab",
-//                       ].includes(e.key)
-//                     ) {
-//                       e.preventDefault();
-//                     }
-//                   }}
-//                 />
+//                 <InputNumber min={0} max={999999} />
 //               </Form.Item>
 //             </Descriptions.Item>
 
@@ -852,24 +815,7 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
 //                 initialValue={0}
 //                 style={{ marginBottom: 0 }}
 //               >
-//                 <InputNumber
-//                   min={0}
-//                   max={999999}
-//                   onKeyDown={(e) => {
-//                     if (
-//                       !/^\d$/.test(e.key) &&
-//                       ![
-//                         "Backspace",
-//                         "Delete",
-//                         "ArrowLeft",
-//                         "ArrowRight",
-//                         "Tab",
-//                       ].includes(e.key)
-//                     ) {
-//                       e.preventDefault();
-//                     }
-//                   }}
-//                 />
+//                 <InputNumber min={0} max={999999} />
 //               </Form.Item>
 //             </Descriptions.Item>
 
@@ -879,24 +825,7 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
 //                 initialValue={0}
 //                 style={{ marginBottom: 0 }}
 //               >
-//                 <InputNumber
-//                   min={0}
-//                   max={999999}
-//                   onKeyDown={(e) => {
-//                     if (
-//                       !/^\d$/.test(e.key) &&
-//                       ![
-//                         "Backspace",
-//                         "Delete",
-//                         "ArrowLeft",
-//                         "ArrowRight",
-//                         "Tab",
-//                       ].includes(e.key)
-//                     ) {
-//                       e.preventDefault();
-//                     }
-//                   }}
-//                 />
+//                 <InputNumber min={0} max={999999} />
 //               </Form.Item>
 //             </Descriptions.Item>
 
@@ -906,24 +835,7 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
 //                 initialValue={0}
 //                 style={{ marginBottom: 0 }}
 //               >
-//                 <InputNumber
-//                   min={0}
-//                   max={999999}
-//                   onKeyDown={(e) => {
-//                     if (
-//                       !/^\d$/.test(e.key) &&
-//                       ![
-//                         "Backspace",
-//                         "Delete",
-//                         "ArrowLeft",
-//                         "ArrowRight",
-//                         "Tab",
-//                       ].includes(e.key)
-//                     ) {
-//                       e.preventDefault();
-//                     }
-//                   }}
-//                 />
+//                 <InputNumber min={0} max={999999} />
 //               </Form.Item>
 //             </Descriptions.Item>
 
@@ -933,24 +845,7 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
 //                 initialValue={0}
 //                 style={{ marginBottom: 0 }}
 //               >
-//                 <InputNumber
-//                   min={0}
-//                   max={999999}
-//                   onKeyDown={(e) => {
-//                     if (
-//                       !/^\d$/.test(e.key) &&
-//                       ![
-//                         "Backspace",
-//                         "Delete",
-//                         "ArrowLeft",
-//                         "ArrowRight",
-//                         "Tab",
-//                       ].includes(e.key)
-//                     ) {
-//                       e.preventDefault();
-//                     }
-//                   }}
-//                 />
+//                 <InputNumber min={0} max={999999} />
 //               </Form.Item>
 //             </Descriptions.Item>
 
@@ -960,24 +855,7 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
 //                 initialValue={0}
 //                 style={{ marginBottom: 0 }}
 //               >
-//                 <InputNumber
-//                   min={0}
-//                   max={999999}
-//                   onKeyDown={(e) => {
-//                     if (
-//                       !/^\d$/.test(e.key) &&
-//                       ![
-//                         "Backspace",
-//                         "Delete",
-//                         "ArrowLeft",
-//                         "ArrowRight",
-//                         "Tab",
-//                       ].includes(e.key)
-//                     ) {
-//                       e.preventDefault();
-//                     }
-//                   }}
-//                 />
+//                 <InputNumber min={0} max={999999} />
 //               </Form.Item>
 //             </Descriptions.Item>
 //           </Descriptions>
@@ -985,6 +863,9 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
 
 //         <div style={{ textAlign: "right", marginTop: 10 }}>
 //           <Button onClick={handleMagic}>Заполнить</Button>
+//           <Button onClick={handleMagic10} style={{ marginLeft: 8 }}>
+//             Заполнить 10
+//           </Button>
 //         </div>
 //       </Modal>
 //     </ConfigProvider>
