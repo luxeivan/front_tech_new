@@ -115,9 +115,7 @@ export default function MainContent() {
   const endIndex = startIndex + pageSize;
   const pageIncidents = sortedIncidents.slice(startIndex, endIndex);
 
-  // Готовим dataSource для IncidentsTable
   const dataSource = pageIncidents.map((incident) => {
-    // ИСПРАВЛЕНО: берем city_name и Street
     const cityName = incident.AddressInfo?.city_name || "Неизвестно";
     const streetsArr = incident.AddressInfo?.Street || [];
     const streets = streetsArr.length

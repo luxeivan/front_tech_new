@@ -14,7 +14,6 @@ export default function IncidentsTable({
   const expandedRowRender = (record) => {
     const incident = record.incident;
 
-    // Используем новые поля: city_name и массив Street
     const cityName = incident.AddressInfo?.city_name || "нет";
     const streetsArr = incident.AddressInfo?.Street || [];
     const streets = streetsArr.length
@@ -140,7 +139,6 @@ export default function IncidentsTable({
     );
   };
 
-  // Определяем колонки таблицы
   const columns = [
     {
       title: "Городской округ",

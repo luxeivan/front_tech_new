@@ -27,7 +27,6 @@ dayjs.extend(customParseFormat);
 import useAuthStore from "@/stores/authStore";
 import useNewIncidentStore from "@/stores/newIncidentStore";
 
-// --- Эти вспомогательные функции как и раньше ---
 function makeShortCityLabel(item) {
   const { city, settlement, area } = item.data;
   return city || settlement || area || item.value;
