@@ -14,27 +14,31 @@ import {
   ConfigProvider,
   Select,
   AutoComplete,
+  FormList,
 } from "antd";
 import ru_RU from "antd/locale/ru_RU";
 import dayjs from "dayjs";
 import customParseFormat from "dayjs/plugin/customParseFormat";
 import "dayjs/locale/ru";
+
 dayjs.locale("ru");
 dayjs.extend(customParseFormat);
 
 import useAuthStore from "@/stores/authStore";
 import useNewIncidentStore from "@/stores/newIncidentStore";
 
-const { Option } = Select;
-const { Title } = Typography;
-const { List: FormList } = Form;
+// --- Эти вспомогательные функции как и раньше ---
+function makeShortCityLabel(item) {
+  const { city, settlement, area } = item.data;
+  return city || settlement || area || item.value;
+}
+function makeShortStreetLabel(item) {
+  const { street, settlement } = item.data;
+  if (settlement && street) return `${settlement}, ${street}`;
+  return street || item.value;
+}
 
-/**
- * Запрос к нашему прокси /api/dadata
- * @param {string} query - ввод пользователя
- * @param {"address"|"street"} mode - режим поиска
- * @param {string|null} city_fias_id - ограничение по городу
- */
+// Запрос к нашему прокси /api/dadata
 async function fetchDadataSuggestions(
   query,
   mode = "address",
@@ -49,38 +53,13 @@ async function fetchDadataSuggestions(
   const json = await res.json();
   if (json.status === "ok") {
     return json.data;
-  } else {
-    console.error("Ошибка при запросе /api/dadata:", json);
-    return [];
   }
+  console.error("Ошибка при запросе /api/dadata:", json);
+  return [];
 }
 
-/**
- * Получить «короткий» label для города,
- * убирая «Московская область» и т.п.
- */
-function makeShortCityLabel(item) {
-  // Например, item.data.city = "Домодедово"
-  // Или item.data.settlement = "гп Видное"
-  const { city, settlement, area } = item.data;
-  // Пытаемся вывести city или settlement; если нет — fallback на item.value
-  return city || settlement || area || item.value;
-}
-
-/**
- * Получить «короткий» label для улицы:
- * например, "мкр Белые Столбы, ул Ленина"
- * (без "Московская обл, г Домодедово," и т.д.)
- */
-function makeShortStreetLabel(item) {
-  const { street, settlement } = item.data;
-  // Если есть settlement и street, склеиваем
-  if (settlement && street) {
-    return `${settlement}, ${street}`;
-  }
-  // Иначе берём street, а если нет — fallback item.value
-  return street || item.value;
-}
+const { Option } = Select;
+const { Title } = Typography;
 
 export default function NewIncidentModal({ visible, onCancel, form }) {
   const [localForm] = Form.useForm();
@@ -89,11 +68,13 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
   const { token } = useAuthStore();
   const { fillFormWithMagic, sendMultipleIncidents } = useNewIncidentStore();
 
-  // ======== Автокомплит для населённого пункта ========
+  // Автокомплит город
   const [citySearch, setCitySearch] = useState("");
   const [cityOptions, setCityOptions] = useState([]);
 
-  // ======== При открытии сбрасываем всё ========
+  // Список улиц (Form.List)
+  const [streetsOptionsMap, setStreetsOptionsMap] = useState({});
+
   useEffect(() => {
     if (visible) {
       usedForm.setFieldsValue({
@@ -116,16 +97,16 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
           building_type: "жилой сектор",
           city_name: "",
           city_fias_id: "",
-          // Массив улиц (пустой изначально)
           Street: [],
         },
       });
       setCitySearch("");
       setCityOptions([]);
+      setStreetsOptionsMap({});
     }
   }, [visible, usedForm]);
 
-  // Поиск городов (mode="address")
+  // ====== Город ======
   const handleCitySearch = useCallback(async (value) => {
     setCitySearch(value);
     if (value.length < 2) {
@@ -134,13 +115,14 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
     }
     try {
       const suggestions = await fetchDadataSuggestions(value, "address");
-      // Делаем короткий label
+      // Уникальный fias => value, короткий => label
       const options = suggestions.map((item) => {
+        const fias = item.data.city_fias_id || item.data.fias_id;
         const shortLabel = makeShortCityLabel(item);
         return {
-          value: shortLabel, // что попадёт в input
-          label: shortLabel, // что показывается в списке
-          fias: item.data.city_fias_id || item.data.fias_id,
+          label: shortLabel, // Показываем это в списке
+          value: fias || shortLabel, // Гарантированно уникально
+          shortLabel,
         };
       });
       setCityOptions(options);
@@ -150,21 +132,56 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
     }
   }, []);
 
-  // Выбор города → заполняем city_name, city_fias_id, сбрасываем улицы
-  const handleCitySelect = (selectedValue, option) => {
-    usedForm.setFieldValue(["addressInfo", "city_name"], selectedValue);
-    usedForm.setFieldValue(["addressInfo", "city_fias_id"], option.fias || "");
-    setCitySearch(selectedValue);
-    // Сбрасываем улицы
+  const handleCitySelect = (value, option) => {
+    // value = fias, option.label = короткое название
+    usedForm.setFieldValue(["addressInfo", "city_name"], option.label);
+    usedForm.setFieldValue(["addressInfo", "city_fias_id"], value);
+    setCitySearch(option.label);
+    // Сбрасываем список улиц
     usedForm.setFieldValue(["addressInfo", "Street"], []);
+    setStreetsOptionsMap({});
   };
 
-  // ======== Обработка отправки ========
+  // ====== Улицы ======
+  const handleStreetSearch = async (val, fieldIndex) => {
+    const cityFias = usedForm.getFieldValue(["addressInfo", "city_fias_id"]);
+    if (!val || val.length < 2) {
+      setStreetsOptionsMap((prev) => ({ ...prev, [fieldIndex]: [] }));
+      return;
+    }
+    try {
+      const suggestions = await fetchDadataSuggestions(val, "street", cityFias);
+      const opts = suggestions.map((item) => {
+        const fias = item.data.street_fias_id || item.data.fias_id;
+        const shortLabel = makeShortStreetLabel(item);
+        return {
+          label: shortLabel,
+          value: fias || shortLabel, // Уникально
+        };
+      });
+      setStreetsOptionsMap((prev) => ({ ...prev, [fieldIndex]: opts }));
+    } catch (error) {
+      console.error("Ошибка handleStreetSearch:", error);
+      setStreetsOptionsMap((prev) => ({ ...prev, [fieldIndex]: [] }));
+    }
+  };
+
+  const handleStreetSelect = (value, option, fieldIndex) => {
+    usedForm.setFieldValue(
+      ["addressInfo", "Street", fieldIndex, "street_name"],
+      option.label
+    );
+    usedForm.setFieldValue(
+      ["addressInfo", "Street", fieldIndex, "street_fias_id"],
+      value
+    );
+  };
+
+  // ====== Сабмит ======
   const handleOk = async () => {
     try {
       const values = await usedForm.validateFields();
 
-      // Форматируем дату/время
       const start_date = values.start_date.format("YYYY-MM-DD");
       const start_time = values.start_time.format("HH:mm") + ":00.000";
       const est_date = values.estimated_restoration_date.format("YYYY-MM-DD");
@@ -174,7 +191,6 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
         `${est_date}T${est_time}`
       ).toISOString();
 
-      // Статистика
       const ds = values.disruptionStats || {};
       const disruptionStats = {
         affected_settlements: ds.affected_settlements || 0,
@@ -247,13 +263,11 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
     }
   };
 
-  // ======== «Заполнить» (магия) ========
   const handleMagic = () => {
     fillFormWithMagic(usedForm);
     message.info("Случайные данные заполнены!");
   };
 
-  // ======== «Заполнить 10» ========
   const handleMagic10 = async () => {
     try {
       await sendMultipleIncidents(token);
@@ -264,50 +278,6 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
       console.error("Ошибка при создании 10 ТН:", error);
       message.error("Ошибка при создании 10 ТН!");
     }
-  };
-
-  // ======== Для полей улиц используем Form.List ========
-  // Набор опций автокомплита для каждой "строки"
-  const [streetsOptionsMap, setStreetsOptionsMap] = useState({});
-
-  // Поиск улиц (mode="street"), завязан на index поля
-  const handleStreetSearch = async (value, fieldIndex) => {
-    const cityFias = usedForm.getFieldValue(["addressInfo", "city_fias_id"]);
-    if (!value || value.length < 2) {
-      setStreetsOptionsMap((prev) => ({ ...prev, [fieldIndex]: [] }));
-      return;
-    }
-    try {
-      const suggestions = await fetchDadataSuggestions(
-        value,
-        "street",
-        cityFias
-      );
-      const opts = suggestions.map((item) => {
-        const shortLabel = makeShortStreetLabel(item);
-        return {
-          value: shortLabel,
-          label: shortLabel,
-          fias: item.data.street_fias_id || item.data.fias_id,
-        };
-      });
-      setStreetsOptionsMap((prev) => ({ ...prev, [fieldIndex]: opts }));
-    } catch (error) {
-      console.error("Ошибка в handleStreetSearch:", error);
-      setStreetsOptionsMap((prev) => ({ ...prev, [fieldIndex]: [] }));
-    }
-  };
-
-  // При выборе улицы
-  const handleStreetSelect = (selectedValue, option, fieldIndex) => {
-    usedForm.setFieldValue(
-      ["addressInfo", "Street", fieldIndex, "street_name"],
-      selectedValue
-    );
-    usedForm.setFieldValue(
-      ["addressInfo", "Street", fieldIndex, "street_fias_id"],
-      option.fias || ""
-    );
   };
 
   return (
@@ -374,11 +344,12 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
             rules={[{ required: true, message: "Укажите населенный пункт" }]}
           >
             <AutoComplete
+              optionLabelProp="label" // важно!
+              placeholder="Начните вводить город Московской области"
               value={citySearch}
               onSearch={handleCitySearch}
               onSelect={handleCitySelect}
               options={cityOptions}
-              placeholder="Начните вводить город Московской области"
               allowClear
               style={{ width: "100%" }}
             />
@@ -389,8 +360,8 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
             <Input />
           </Form.Item>
 
-          {/* ДИНАМИЧЕСКИЙ СПИСОК УЛИЦ */}
-          <FormList name={["addressInfo", "Street"]}>
+          {/* Список улиц (динамический) */}
+          <Form.List name={["addressInfo", "Street"]}>
             {(fields, { add, remove }) => (
               <>
                 {fields.map(({ key, name, ...restField }, index) => (
@@ -404,7 +375,7 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
                       style={{
                         display: "flex",
                         gap: 10,
-                        alignItems: "baseline", // Кнопка и инпут по одной линии
+                        alignItems: "baseline",
                       }}
                     >
                       <Form.Item
@@ -414,6 +385,7 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
                         noStyle
                       >
                         <AutoComplete
+                          optionLabelProp="label"
                           placeholder="Введите улицу"
                           onSearch={(val) => handleStreetSearch(val, index)}
                           onSelect={(val, opt) =>
@@ -424,7 +396,6 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
                         />
                       </Form.Item>
 
-                      {/* Скрываем fias */}
                       <Form.Item name={[name, "street_fias_id"]} hidden>
                         <Input />
                       </Form.Item>
@@ -445,7 +416,7 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
                 </Button>
               </>
             )}
-          </FormList>
+          </Form.List>
 
           <Form.Item
             name={["addressInfo", "settlement_type"]}
@@ -595,10 +566,13 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
 
 // const { Option } = Select;
 // const { Title } = Typography;
+// const { List: FormList } = Form;
 
 // /**
-//  * Функция для получения подсказок с нашего прокси /api/dadata.
-//  * Принимает: query, mode (address|street) и, для улиц, city_fias_id.
+//  * Запрос к нашему прокси /api/dadata
+//  * @param {string} query - ввод пользователя
+//  * @param {"address"|"street"} mode - режим поиска
+//  * @param {string|null} city_fias_id - ограничение по городу
 //  */
 // async function fetchDadataSuggestions(
 //   query,
@@ -620,6 +594,33 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
 //   }
 // }
 
+// /**
+//  * Получить «короткий» label для города,
+//  * убирая «Московская область» и т.п.
+//  */
+// function makeShortCityLabel(item) {
+//   // Например, item.data.city = "Домодедово"
+//   // Или item.data.settlement = "гп Видное"
+//   const { city, settlement, area } = item.data;
+//   // Пытаемся вывести city или settlement; если нет — fallback на item.value
+//   return city || settlement || area || item.value;
+// }
+
+// /**
+//  * Получить «короткий» label для улицы:
+//  * например, "мкр Белые Столбы, ул Ленина"
+//  * (без "Московская обл, г Домодедово," и т.д.)
+//  */
+// function makeShortStreetLabel(item) {
+//   const { street, settlement } = item.data;
+//   // Если есть settlement и street, склеиваем
+//   if (settlement && street) {
+//     return `${settlement}, ${street}`;
+//   }
+//   // Иначе берём street, а если нет — fallback item.value
+//   return street || item.value;
+// }
+
 // export default function NewIncidentModal({ visible, onCancel, form }) {
 //   const [localForm] = Form.useForm();
 //   const usedForm = form || localForm;
@@ -627,15 +628,11 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
 //   const { token } = useAuthStore();
 //   const { fillFormWithMagic, sendMultipleIncidents } = useNewIncidentStore();
 
-//   // Состояния для автокомплита населённого пункта
+//   // ======== Автокомплит для населённого пункта ========
 //   const [citySearch, setCitySearch] = useState("");
 //   const [cityOptions, setCityOptions] = useState([]);
 
-//   // Состояния для автокомплита улицы
-//   const [streetSearch, setStreetSearch] = useState("");
-//   const [streetOptions, setStreetOptions] = useState([]);
-
-//   // При открытии модалки сбрасываем поля формы и стейты автокомплита
+//   // ======== При открытии сбрасываем всё ========
 //   useEffect(() => {
 //     if (visible) {
 //       usedForm.setFieldsValue({
@@ -658,17 +655,16 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
 //           building_type: "жилой сектор",
 //           city_name: "",
 //           city_fias_id: "",
-//           street_name: "",
+//           // Массив улиц (пустой изначально)
+//           Street: [],
 //         },
 //       });
 //       setCitySearch("");
 //       setCityOptions([]);
-//       setStreetSearch("");
-//       setStreetOptions([]);
 //     }
 //   }, [visible, usedForm]);
 
-//   // Обработка ввода для поля "Населенный пункт"
+//   // Поиск городов (mode="address")
 //   const handleCitySearch = useCallback(async (value) => {
 //     setCitySearch(value);
 //     if (value.length < 2) {
@@ -677,69 +673,37 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
 //     }
 //     try {
 //       const suggestions = await fetchDadataSuggestions(value, "address");
-//       const options = suggestions.map((item) => ({
-//         value: item.value,
-//         label: item.value,
-//         fias: item.data.city_fias_id || item.data.fias_id,
-//         city: item.data.city,
-//       }));
+//       // Делаем короткий label
+//       const options = suggestions.map((item) => {
+//         const shortLabel = makeShortCityLabel(item);
+//         return {
+//           value: shortLabel, // что попадёт в input
+//           label: shortLabel, // что показывается в списке
+//           fias: item.data.city_fias_id || item.data.fias_id,
+//         };
+//       });
 //       setCityOptions(options);
 //     } catch (error) {
-//       console.error("Ошибка в handleCitySearch:", error);
+//       console.error("Ошибка handleCitySearch:", error);
 //       setCityOptions([]);
 //     }
 //   }, []);
 
-//   // При выборе населённого пункта сохраняем данные в форму и сбрасываем улицу
+//   // Выбор города → заполняем city_name, city_fias_id, сбрасываем улицы
 //   const handleCitySelect = (selectedValue, option) => {
 //     usedForm.setFieldValue(["addressInfo", "city_name"], selectedValue);
 //     usedForm.setFieldValue(["addressInfo", "city_fias_id"], option.fias || "");
 //     setCitySearch(selectedValue);
-//     usedForm.setFieldValue(["addressInfo", "street_name"], "");
-//     setStreetSearch("");
-//     setStreetOptions([]);
+//     // Сбрасываем улицы
+//     usedForm.setFieldValue(["addressInfo", "Street"], []);
 //   };
 
-//   // Обработка ввода для поля "Улица"
-//   const handleStreetSearch = useCallback(
-//     async (value) => {
-//       setStreetSearch(value);
-//       if (value.length < 2) {
-//         setStreetOptions([]);
-//         return;
-//       }
-//       // Получаем выбранный город (фиаc id) из формы
-//       const cityFias = usedForm.getFieldValue(["addressInfo", "city_fias_id"]);
-//       try {
-//         const suggestions = await fetchDadataSuggestions(
-//           value,
-//           "street",
-//           cityFias
-//         );
-//         const options = suggestions.map((item) => ({
-//           value: item.value,
-//           label: item.value,
-//         }));
-//         setStreetOptions(options);
-//       } catch (error) {
-//         console.error("Ошибка в handleStreetSearch:", error);
-//         setStreetOptions([]);
-//       }
-//     },
-//     [usedForm]
-//   );
-
-//   // При выборе улицы сохраняем выбранное значение в форму
-//   const handleStreetSelect = (selectedValue) => {
-//     usedForm.setFieldValue(["addressInfo", "street_name"], selectedValue);
-//     setStreetSearch(selectedValue);
-//   };
-
-//   // Отправка формы
+//   // ======== Обработка отправки ========
 //   const handleOk = async () => {
 //     try {
 //       const values = await usedForm.validateFields();
 
+//       // Форматируем дату/время
 //       const start_date = values.start_date.format("YYYY-MM-DD");
 //       const start_time = values.start_time.format("HH:mm") + ":00.000";
 //       const est_date = values.estimated_restoration_date.format("YYYY-MM-DD");
@@ -749,6 +713,7 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
 //         `${est_date}T${est_time}`
 //       ).toISOString();
 
+//       // Статистика
 //       const ds = values.disruptionStats || {};
 //       const disruptionStats = {
 //         affected_settlements: ds.affected_settlements || 0,
@@ -766,7 +731,7 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
 //         city_name: values.addressInfo?.city_name || "",
 //         settlement_type: values.addressInfo?.settlement_type,
 //         building_type: values.addressInfo?.building_type,
-//         street_name: values.addressInfo?.street_name || "",
+//         Street: values.addressInfo?.Street || [],
 //       };
 
 //       const description = [
@@ -791,6 +756,8 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
 //           sent_to_minenergo: false,
 //         },
 //       };
+
+//       console.log("payload:", payload);
 
 //       const response = await fetch(
 //         `${process.env.NEXT_PUBLIC_STRAPI_URL}/api/incidents`,
@@ -819,11 +786,13 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
 //     }
 //   };
 
+//   // ======== «Заполнить» (магия) ========
 //   const handleMagic = () => {
 //     fillFormWithMagic(usedForm);
 //     message.info("Случайные данные заполнены!");
 //   };
 
+//   // ======== «Заполнить 10» ========
 //   const handleMagic10 = async () => {
 //     try {
 //       await sendMultipleIncidents(token);
@@ -834,6 +803,50 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
 //       console.error("Ошибка при создании 10 ТН:", error);
 //       message.error("Ошибка при создании 10 ТН!");
 //     }
+//   };
+
+//   // ======== Для полей улиц используем Form.List ========
+//   // Набор опций автокомплита для каждой "строки"
+//   const [streetsOptionsMap, setStreetsOptionsMap] = useState({});
+
+//   // Поиск улиц (mode="street"), завязан на index поля
+//   const handleStreetSearch = async (value, fieldIndex) => {
+//     const cityFias = usedForm.getFieldValue(["addressInfo", "city_fias_id"]);
+//     if (!value || value.length < 2) {
+//       setStreetsOptionsMap((prev) => ({ ...prev, [fieldIndex]: [] }));
+//       return;
+//     }
+//     try {
+//       const suggestions = await fetchDadataSuggestions(
+//         value,
+//         "street",
+//         cityFias
+//       );
+//       const opts = suggestions.map((item) => {
+//         const shortLabel = makeShortStreetLabel(item);
+//         return {
+//           value: shortLabel,
+//           label: shortLabel,
+//           fias: item.data.street_fias_id || item.data.fias_id,
+//         };
+//       });
+//       setStreetsOptionsMap((prev) => ({ ...prev, [fieldIndex]: opts }));
+//     } catch (error) {
+//       console.error("Ошибка в handleStreetSearch:", error);
+//       setStreetsOptionsMap((prev) => ({ ...prev, [fieldIndex]: [] }));
+//     }
+//   };
+
+//   // При выборе улицы
+//   const handleStreetSelect = (selectedValue, option, fieldIndex) => {
+//     usedForm.setFieldValue(
+//       ["addressInfo", "Street", fieldIndex, "street_name"],
+//       selectedValue
+//     );
+//     usedForm.setFieldValue(
+//       ["addressInfo", "Street", fieldIndex, "street_fias_id"],
+//       option.fias || ""
+//     );
 //   };
 
 //   return (
@@ -852,34 +865,25 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
 //             label="Дата начала ТН"
 //             rules={[{ required: true, message: "Укажите дату начала ТН" }]}
 //           >
-//             <DatePicker
-//               locale={ru_RU.DatePicker || ru_RU}
-//               format="DD.MM.YYYY"
-//               style={{ width: "100%" }}
-//             />
+//             <DatePicker format="DD.MM.YYYY" style={{ width: "100%" }} />
 //           </Form.Item>
+
 //           <Form.Item
 //             name="start_time"
 //             label="Время начала ТН"
 //             rules={[{ required: true, message: "Укажите время начала ТН" }]}
 //           >
-//             <TimePicker
-//               locale={ru_RU.DatePicker || ru_RU}
-//               format="HH:mm"
-//               style={{ width: "100%" }}
-//             />
+//             <TimePicker format="HH:mm" style={{ width: "100%" }} />
 //           </Form.Item>
+
 //           <Form.Item
 //             name="estimated_restoration_date"
 //             label="Прогноз восстановления (дата)"
 //             rules={[{ required: true, message: "Укажите дату восстановления" }]}
 //           >
-//             <DatePicker
-//               locale={ru_RU.DatePicker || ru_RU}
-//               format="DD.MM.YYYY"
-//               style={{ width: "100%" }}
-//             />
+//             <DatePicker format="DD.MM.YYYY" style={{ width: "100%" }} />
 //           </Form.Item>
+
 //           <Form.Item
 //             name="estimated_restoration_time"
 //             label="Прогноз восстановления (время)"
@@ -887,12 +891,9 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
 //               { required: true, message: "Укажите время восстановления" },
 //             ]}
 //           >
-//             <TimePicker
-//               locale={ru_RU.DatePicker || ru_RU}
-//               format="HH:mm"
-//               style={{ width: "100%" }}
-//             />
+//             <TimePicker format="HH:mm" style={{ width: "100%" }} />
 //           </Form.Item>
+
 //           <Form.Item
 //             name="description"
 //             label="Описание ТН"
@@ -900,9 +901,12 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
 //           >
 //             <Input.TextArea rows={3} />
 //           </Form.Item>
+
 //           <Title level={5} style={{ marginTop: 20 }}>
 //             Адресная информация
 //           </Title>
+
+//           {/* Населенный пункт */}
 //           <Form.Item
 //             label="Населенный пункт"
 //             name={["addressInfo", "city_name"]}
@@ -918,23 +922,70 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
 //               style={{ width: "100%" }}
 //             />
 //           </Form.Item>
+
+//           {/* Скрытое поле для city_fias_id */}
 //           <Form.Item name={["addressInfo", "city_fias_id"]} hidden>
 //             <Input />
 //           </Form.Item>
-//           <Form.Item
-//             label="Улица (при необходимости)"
-//             name={["addressInfo", "street_name"]}
-//           >
-//             <AutoComplete
-//               value={streetSearch}
-//               onSearch={handleStreetSearch}
-//               onSelect={handleStreetSelect}
-//               options={streetOptions}
-//               placeholder="Начните вводить улицу"
-//               allowClear
-//               style={{ width: "100%" }}
-//             />
-//           </Form.Item>
+
+//           {/* ДИНАМИЧЕСКИЙ СПИСОК УЛИЦ */}
+//           <FormList name={["addressInfo", "Street"]}>
+//             {(fields, { add, remove }) => (
+//               <>
+//                 {fields.map(({ key, name, ...restField }, index) => (
+//                   <Form.Item
+//                     key={key}
+//                     label="Улица"
+//                     required
+//                     style={{ marginBottom: 0 }}
+//                   >
+//                     <div
+//                       style={{
+//                         display: "flex",
+//                         gap: 10,
+//                         alignItems: "baseline", // Кнопка и инпут по одной линии
+//                       }}
+//                     >
+//                       <Form.Item
+//                         {...restField}
+//                         name={[name, "street_name"]}
+//                         style={{ marginBottom: 0, flex: 1 }}
+//                         noStyle
+//                       >
+//                         <AutoComplete
+//                           placeholder="Введите улицу"
+//                           onSearch={(val) => handleStreetSearch(val, index)}
+//                           onSelect={(val, opt) =>
+//                             handleStreetSelect(val, opt, index)
+//                           }
+//                           options={streetsOptionsMap[index] || []}
+//                           allowClear
+//                         />
+//                       </Form.Item>
+
+//                       {/* Скрываем fias */}
+//                       <Form.Item name={[name, "street_fias_id"]} hidden>
+//                         <Input />
+//                       </Form.Item>
+
+//                       <Button danger onClick={() => remove(name)}>
+//                         Удалить
+//                       </Button>
+//                     </div>
+//                   </Form.Item>
+//                 ))}
+//                 <Button
+//                   type="dashed"
+//                   onClick={() => add()}
+//                   block
+//                   style={{ marginTop: 8 }}
+//                 >
+//                   + Добавить улицу
+//                 </Button>
+//               </>
+//             )}
+//           </FormList>
+
 //           <Form.Item
 //             name={["addressInfo", "settlement_type"]}
 //             label="Тип поселения"
@@ -946,6 +997,7 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
 //               <Option value="сельский">сельский</Option>
 //             </Select>
 //           </Form.Item>
+
 //           <Form.Item
 //             name={["addressInfo", "building_type"]}
 //             label="Тип застройки"
@@ -960,6 +1012,7 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
 //               <Option value="СЗО">СЗО</Option>
 //             </Select>
 //           </Form.Item>
+
 //           <Descriptions
 //             bordered
 //             column={2}
@@ -1040,6 +1093,7 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
 //             </Descriptions.Item>
 //           </Descriptions>
 //         </Form>
+
 //         <div style={{ textAlign: "right", marginTop: 10 }}>
 //           <Button onClick={handleMagic}>Заполнить</Button>
 //           <Button onClick={handleMagic10} style={{ marginLeft: 8 }}>
