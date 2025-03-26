@@ -10,7 +10,6 @@ import {
   Button,
 } from "antd";
 import ru_RU from "antd/locale/ru_RU";
-// import  from "moment";
 import useAuthStore from "../../stores/authStore";
 import { getRandomCloseIncidentFields } from "../../utils/magicFill";
 import dayjs from "dayjs";
