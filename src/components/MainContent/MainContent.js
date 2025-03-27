@@ -1,5 +1,6 @@
-"use client";
+"use client"; // обязательно в начале файла
 import React, { useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
 import {
   Spin,
   Alert,
@@ -11,18 +12,12 @@ import {
   DatePicker,
   ConfigProvider,
 } from "antd";
-
 import ru_RU from "antd/locale/ru_RU";
 import dayjs from "dayjs";
 import customParseFormat from "dayjs/plugin/customParseFormat";
 import isBetween from "dayjs/plugin/isBetween";
 import "dayjs/locale/ru";
 import ExcelJS from "exceljs";
-
-dayjs.extend(customParseFormat);
-dayjs.extend(isBetween);
-dayjs.locale("ru");
-
 import Link from "next/link";
 
 import useAuthStore from "@/stores/authStore";
@@ -30,15 +25,21 @@ import { useIncidentsUtilsStore } from "@/stores/incidentsUtilsStore";
 import { useIncidentsDataStore } from "@/stores/incidentsDataStore";
 import IncidentsTable from "../IncidentsTable";
 
-// Модалки
 import NewIncidentModal from "./NewIncidentModal";
 import CloseIncidentModal from "./CloseIncidentModal";
 import { ReloadOutlined } from "@ant-design/icons";
+
+dayjs.extend(customParseFormat);
+dayjs.extend(isBetween);
+dayjs.locale("ru");
 
 const { Title } = Typography;
 const { RangePicker } = DatePicker;
 
 export default function MainContent() {
+  // Теперь вызов useSession() внутри компонента
+  const { data: session } = useSession();
+
   const { token } = useAuthStore();
   const { incidents, loading, error, fetchIncidents } = useIncidentsDataStore();
 
@@ -56,9 +57,9 @@ export default function MainContent() {
 
   useEffect(() => {
     if (token) {
-      fetchIncidents(token);
+      fetchIncidents(session?.user?.jwt);
     }
-  }, [token, fetchIncidents]);
+  }, [token, fetchIncidents, session]);
 
   useEffect(() => {
     setDateRange([dayjs(), dayjs()]);
@@ -69,11 +70,11 @@ export default function MainContent() {
     if (newModalVisible || closeModalVisible) return;
 
     const intervalId = setInterval(() => {
-      fetchIncidents(token);
+      fetchIncidents(session?.user?.jwt);
     }, 120000);
 
     return () => clearInterval(intervalId);
-  }, [token, fetchIncidents, newModalVisible, closeModalVisible]);
+  }, [token, fetchIncidents, newModalVisible, closeModalVisible, session]);
 
   if (error) {
     return (
@@ -272,7 +273,7 @@ export default function MainContent() {
           />
           <ReloadOutlined
             onClick={() => {
-              fetchIncidents(token);
+              fetchIncidents(session?.user?.jwt);
             }}
             style={{ cursor: "pointer" }}
           />
@@ -323,7 +324,7 @@ export default function MainContent() {
               visible={newModalVisible}
               onCancel={() => {
                 setNewModalVisible(false);
-                fetchIncidents(token);
+                fetchIncidents(session?.user?.jwt);
               }}
             />
             <CloseIncidentModal
@@ -333,7 +334,7 @@ export default function MainContent() {
               onSuccess={() => {
                 setCloseModalVisible(false);
                 message.success("ТН переведена в статус 'Выполнена'!");
-                fetchIncidents(token);
+                fetchIncidents(session?.user?.jwt);
               }}
             />
           </>
@@ -419,7 +420,7 @@ export default function MainContent() {
 //   // Загружаем инциденты при появлении токена
 //   useEffect(() => {
 //     if (token) {
-//       fetchIncidents(token);
+//       fetchIncidents(session?.user?.jwt);;
 //     }
 //   }, [token, fetchIncidents]);
 
@@ -434,7 +435,7 @@ export default function MainContent() {
 //     if (newModalVisible || closeModalVisible) return;
 
 //     const intervalId = setInterval(() => {
-//       fetchIncidents(token);
+//       fetchIncidents(session?.user?.jwt);;
 //     }, 120000);
 
 //     return () => clearInterval(intervalId);
@@ -672,7 +673,7 @@ export default function MainContent() {
 //             }}
 //             allowClear
 //           />
-//           <ReloadOutlined onClick={() => { fetchIncidents(token) }} style={{ cursor: "pointer" }} />
+//           <ReloadOutlined onClick={() => { fetchIncidents(session?.user?.jwt); }} style={{ cursor: "pointer" }} />
 //         </div>
 //         {loading &&
 //           <div style={{ textAlign: "center", marginTop: 50 }}>
@@ -719,7 +720,7 @@ export default function MainContent() {
 //               visible={newModalVisible}
 //               onCancel={() => {
 //                 setNewModalVisible(false);
-//                 fetchIncidents(token); // после закрытия можем обновить список
+//                 fetchIncidents(session?.user?.jwt);; // после закрытия можем обновить список
 //               }}
 //             />
 //             <CloseIncidentModal
@@ -730,7 +731,7 @@ export default function MainContent() {
 //                 setCloseModalVisible(false);
 //                 message.success("ТН переведена в статус 'Выполнена'!");
 //                 // Обновляем список
-//                 fetchIncidents(token);
+//                 fetchIncidents(session?.user?.jwt);;
 //               }}
 //             />
 
