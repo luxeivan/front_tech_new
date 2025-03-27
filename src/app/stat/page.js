@@ -1,5 +1,6 @@
 "use client";
 import React, { useEffect } from "react";
+import { useSession } from "next-auth/react";
 import { Typography, ConfigProvider, Spin, Alert, Flex, Space } from "antd";
 import ru_RU from "antd/locale/ru_RU";
 import dayjs from "dayjs";
@@ -34,7 +35,8 @@ const metricOptions = [
 ];
 
 export default function Stat() {
-  const { token } = useAuthStore();
+
+    const { data: session } = useSession();
   const { incidents, loading, error, fetchIncidents } = useIncidentsDataStore();
 
   // Подключаем store для статистики
@@ -54,7 +56,7 @@ export default function Stat() {
 
   useEffect(() => {
     if (token && incidents.length === 0) {
-      fetchIncidents(token);
+      fetchIncidents(session?.user?.jwt);
     }
   }, [token, incidents, fetchIncidents]);
 

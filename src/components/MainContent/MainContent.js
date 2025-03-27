@@ -37,7 +37,6 @@ const { Title } = Typography;
 const { RangePicker } = DatePicker;
 
 export default function MainContent() {
-  // Теперь вызов useSession() внутри компонента
   const { data: session } = useSession();
 
   const { token } = useAuthStore();
