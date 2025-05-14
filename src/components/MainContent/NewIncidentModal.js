@@ -73,7 +73,7 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
       usedForm.setFieldsValue({
         start_date: dayjs(),
         start_time: dayjs(),
-        estimated_restoration_date: dayjs().add(1, "day"),
+        estimated_restoration_date: dayjs(),
         estimated_restoration_time: dayjs().add(2, "hour"),
         disruptionStats: {
           affected_settlements: 0,
