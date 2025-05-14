@@ -70,11 +70,14 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
 
   useEffect(() => {
     if (visible) {
+      const now = dayjs(); // «сейчас»
+      const est = now.add(2, "hour"); // +2 ч (перейдёт на завтра при 23:59)
+
       usedForm.setFieldsValue({
-        start_date: dayjs(),
-        start_time: dayjs(),
-        estimated_restoration_date: dayjs(),
-        estimated_restoration_time: dayjs().add(2, "hour"),
+        start_date: now,
+        start_time: now,
+        estimated_restoration_date: est,
+        estimated_restoration_time: est,
         disruptionStats: {
           affected_settlements: 0,
           affected_residents: 0,
@@ -93,6 +96,7 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
           Street: [],
         },
       });
+
       setCitySearch("");
       setCityOptions([]);
       setStreetsOptionsMap({});
