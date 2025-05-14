@@ -10,7 +10,10 @@ import {
   Button,
 } from "antd";
 import ru_RU from "antd/locale/ru_RU";
-import useAuthStore from "../../stores/authStore";
+
+// import useAuthStore from "../../stores/authStore";
+import { useSession } from "next-auth/react";
+
 import { getRandomCloseIncidentFields } from "../../utils/magicFill";
 import dayjs from "dayjs";
 
@@ -21,7 +24,10 @@ export default function CloseIncidentModal({
   onSuccess,
 }) {
   const [form] = Form.useForm();
-  const { token } = useAuthStore();
+  // const { token } = useAuthStore();
+
+  const { data: session } = useSession();
+  const token = session?.user?.jwt;
 
   useEffect(() => {
     if (visible) {

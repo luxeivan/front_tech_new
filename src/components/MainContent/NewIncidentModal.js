@@ -23,7 +23,10 @@ import "dayjs/locale/ru";
 dayjs.locale("ru");
 dayjs.extend(customParseFormat);
 
-import useAuthStore from "@/stores/authStore";
+// import useAuthStore from "@/stores/authStore";
+
+import { useSession } from "next-auth/react";
+
 
 function makeShortCityLabel(item) {
   const { city, settlement, area } = item.data;
@@ -58,7 +61,9 @@ const { Title } = Typography;
 
 export default function NewIncidentModal({ visible, onCancel, form }) {
   const [localForm] = Form.useForm();
-  const token = useAuthStore((s) => s.token);
+  const { data: session } = useSession();
+  const token = session?.user?.jwt;
+  // const token = useAuthStore((s) => s.token);
   const usedForm = form || localForm;
   const [citySearch, setCitySearch] = useState("");
   const [cityOptions, setCityOptions] = useState([]);

@@ -1,6 +1,5 @@
 "use client"; // обязательно в начале файла
 import React, { useEffect, useState } from "react";
-import { useSession } from "next-auth/react";
 import {
   Spin,
   Alert,
@@ -20,7 +19,9 @@ import "dayjs/locale/ru";
 import ExcelJS from "exceljs";
 import Link from "next/link";
 
-import useAuthStore from "@/stores/authStore";
+// import useAuthStore from "@/stores/authStore";
+import { useSession } from "next-auth/react";
+
 import { useIncidentsUtilsStore } from "@/stores/incidentsUtilsStore";
 import { useIncidentsDataStore } from "@/stores/incidentsDataStore";
 import IncidentsTable from "../IncidentsTable";
@@ -37,9 +38,12 @@ const { Title } = Typography;
 const { RangePicker } = DatePicker;
 
 export default function MainContent() {
-  const { data: session } = useSession();
 
-  const { token } = useAuthStore();
+
+  // const { token } = useAuthStore();
+  const { data: session } = useSession();
+  const token = session?.user?.jwt;
+
   const { incidents, loading, error, fetchIncidents } = useIncidentsDataStore();
 
   const [newModalVisible, setNewModalVisible] = useState(false);
