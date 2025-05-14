@@ -1,65 +1,71 @@
 "use client";
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
-const useAuthStore = create((set, get) => ({
-  token:
-    typeof window !== "undefined" ? localStorage.getItem("jwt") : undefined,
-  isOpenModalAuth: false,
-  loading: false,
-  error: null,
+const useAuthStore = create(
+  persist(
+    (set) => ({
+      /** ---------- state ---------- */
+      token: null, // Strapi-JWT
+      isOpenModalAuth: false, // модалка входа
+      loading: false,
+      error: null,
 
-  closeModal: () => {
-    set({ isOpenModalAuth: false });
-  },
-  openModal: () => {
-    console.log(123);
+      /** ---------- actions ---------- */
+      openModal: () => set({ isOpenModalAuth: true }),
+      closeModal: () => set({ isOpenModalAuth: false }),
 
-    set({ isOpenModalAuth: true });
-  },
-  login: async (identifier, password) => {
-    set({ loading: true, error: null });
-    try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_STRAPI_URL}/api/auth/local`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ identifier, password }),
+      login: async (identifier, password) => {
+        set({ loading: true, error: null });
+
+        try {
+          const res = await fetch(
+            `${process.env.NEXT_PUBLIC_STRAPI_URL}/api/auth/local`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ identifier, password }),
+            }
+          );
+
+          const data = await res.json();
+          console.log("LOGIN START");
+          console.log("STRAPI OK, JWT =", data.jwt);
+          if (data.error) {
+            /* --- человекочитаемое сообщение --- */
+            const translations = {
+              "Invalid identifier or password": "Неверный email или пароль",
+              "Missing credentials": "Заполните все обязательные поля",
+              "Your account has been blocked": "Ваш аккаунт заблокирован",
+              "Too many requests": "Слишком много попыток. Попробуйте позже",
+            };
+            throw new Error(
+              translations[data.error.message] || data.error.message
+            );
+          }
+
+          set({
+            token: data.jwt,
+            loading: false,
+            isOpenModalAuth: false,
+          });
+        } catch (err) {
+          console.error(err);
+          set({
+            error: err.message.replace("identifier", "email"),
+            loading: false,
+          });
         }
-      );
+      },
 
-      const data = await response.json();
+      logout: () => set({ token: null }),
+    }),
 
-      if (data.error) {
-        let message = data.error.message;
-
-        // Добавляем все возможные переводы
-        const errorTranslations = {
-          "Invalid identifier or password": "Неверный email или пароль",
-          "Missing credentials": "Заполните все обязательные поля",
-          "Your account has been blocked": "Ваш аккаунт заблокирован",
-          "Too many requests": "Слишком много попыток. Попробуйте позже",
-        };
-
-        message = errorTranslations[message] || message;
-        throw new Error(message);
-      }
-
-      localStorage.setItem("jwt", data.jwt);
-      set({ token: data.jwt, loading: false, isOpenModalAuth: false });
-    } catch (err) {
-      console.log(err);
-      set({
-        error: err.message.replace("identifier", "email"),
-        loading: false,
-      });
+    {
+      name: "mosoblenergo-jwt",
+      partialize: (state) => ({ token: state.token }),
     }
-  },
-
-  logout: () => {
-    localStorage.removeItem("jwt");
-    set({ token: null });
-  },
-}));
+  )
+);
 
 export default useAuthStore;
