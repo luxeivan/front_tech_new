@@ -38,8 +38,6 @@ const { Title } = Typography;
 const { RangePicker } = DatePicker;
 
 export default function MainContent() {
-
-
   // const { token } = useAuthStore();
   const { data: session } = useSession();
   const token = session?.user?.jwt;
@@ -61,6 +59,7 @@ export default function MainContent() {
   useEffect(() => {
     if (token) {
       fetchIncidents(session?.user?.jwt);
+      console.debug("DEBUG raw incident", incidents[0]);
     }
   }, [token, fetchIncidents, session]);
 
@@ -149,13 +148,46 @@ export default function MainContent() {
       endDateTime: `${endDate} ${endTime}`,
       restHours,
       status_incident: incident.status_incident,
-      documentId: incident.documentId,
+      // documentId: incident.documentId,
     };
   });
 
   const handleCloseIncident = (documentId) => {
     setCurrentIncidentId(documentId);
     setCloseModalVisible(true);
+  };
+
+  // ❌ getStrapiId больше не нужен — удалите его.
+
+  // ✅ handleSendTelegram — сразу используем incident.documentId
+  const handleSendTelegram = async (incident) => {
+    try {
+      // 1. Посылаем сообщение боту
+      await fetch("/api/telegram", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ incident }),
+      });
+
+      // 2. Помечаем инцидент в Strapi (работаем по documentId!)
+      await fetch(
+        `${process.env.NEXT_PUBLIC_STRAPI_URL}/api/incidents/${incident.documentId}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.user.jwt}`,
+          },
+          body: JSON.stringify({ data: { sent_to_telegram: true } }),
+        }
+      );
+
+      message.success("Инцидент отправлен в Telegram");
+      fetchIncidents(session.user.jwt);
+    } catch (err) {
+      console.error(err);
+      message.error("Не удалось отправить в Telegram");
+    }
   };
 
   async function handleExportExcel() {
@@ -312,6 +344,7 @@ export default function MainContent() {
               formatTime={formatTime}
               formatDateTime={formatDateTime}
               onCloseIncident={handleCloseIncident}
+              onSendTelegram={handleSendTelegram}
             />
 
             <div style={{ marginTop: 20, textAlign: "center" }}>

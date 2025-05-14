@@ -10,6 +10,7 @@ export default function IncidentsTable({
   formatTime, // функция форматирования времени
   formatDateTime, // функция форматирования даты-времени
   onCloseIncident, // коллбэк, когда пользователь нажимает "Выполнена"
+  onSendTelegram,
 }) {
   const expandedRowRender = (record) => {
     const incident = record.incident;
@@ -119,10 +120,20 @@ export default function IncidentsTable({
         <Title level={5} style={{ marginTop: 16 }}>
           Отправка данных
         </Title>
-        <p>
+        {/* <p>
           <strong>Отправлено в Telegram:</strong>{" "}
           <Switch checked={!!incident.sent_to_telegram} disabled />
+        </p> */}
+
+        <p>
+          <strong>Отправлено в Telegram:</strong>{" "}
+          <Switch
+            checked={!!incident.sent_to_telegram}
+            disabled={!!incident.sent_to_telegram} // уже отправили → серый
+            onChange={() => onSendTelegram(incident)} /*  ← click */
+          />
         </p>
+
         <p>
           <strong>Отправлено в АРМ ЕДДС:</strong>{" "}
           <Switch checked={!!incident.sent_to_arm_edds} disabled />
@@ -212,4 +223,3 @@ export default function IncidentsTable({
     />
   );
 }
-
