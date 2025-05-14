@@ -220,7 +220,7 @@ export default function MainContent() {
               Новое ТН
             </Button>
             <Button onClick={handleExportExcel}>Экспорт в Excel</Button>
-            <Link href="/stat">
+            <Link href="/stub">
               <Button>Статистика</Button>
             </Link>
           </div>
