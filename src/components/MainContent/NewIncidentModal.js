@@ -27,7 +27,6 @@ dayjs.extend(customParseFormat);
 
 import { useSession } from "next-auth/react";
 
-
 function makeShortCityLabel(item) {
   const { city, settlement, area } = item.data;
   return city || settlement || area || item.value;
@@ -108,16 +107,21 @@ export default function NewIncidentModal({ visible, onCancel, form }) {
     }
     try {
       const suggestions = await fetchDadataSuggestions(value, "address");
-      // Уникальный fias => value, короткий => label
-      const options = suggestions.map((item) => {
-        const fias = item.data.city_fias_id || item.data.fias_id;
-        const shortLabel = makeShortCityLabel(item);
-        return {
-          label: shortLabel, // Показываем это в списке
-          value: fias || shortLabel, // Гарантированно уникально
-          shortLabel,
-        };
-      });
+
+      const seen = new Set();
+      const options = suggestions.reduce((acc, item, idx) => {
+        const fias = item.data.city_fias_id || item.data.fias_id || item.value;
+        if (seen.has(fias)) return acc;
+        seen.add(fias);
+
+        acc.push({
+          label: makeShortCityLabel(item),
+          value: fias,
+          key: fias,
+        });
+        return acc;
+      }, []);
+
       setCityOptions(options);
     } catch (error) {
       console.error("Ошибка handleCitySearch:", error);
