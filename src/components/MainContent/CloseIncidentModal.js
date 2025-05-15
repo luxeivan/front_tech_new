@@ -91,13 +91,13 @@ export default function CloseIncidentModal({
   };
 
   // "Заполнить" — без статистики, только дата/время/описание
-  const handleMagic = () => {
-    const randomValues = getRandomCloseIncidentFields();
-    // Удаляем любые поля DisruptionStats, если они есть
-    delete randomValues.disruptionStats;
-    form.setFieldsValue(randomValues);
-    message.info("Заполнить сработало! Поля заполнены случайными значениями.");
-  };
+  // const handleMagic = () => {
+  //   const randomValues = getRandomCloseIncidentFields();
+  //   // Удаляем любые поля DisruptionStats, если они есть
+  //   delete randomValues.disruptionStats;
+  //   form.setFieldsValue(randomValues);
+  //   message.info("Заполнить сработало! Поля заполнены случайными значениями.");
+  // };
 
   return (
     <Modal
@@ -144,9 +144,9 @@ export default function CloseIncidentModal({
         </Form.Item>
       </Form>
 
-      <div style={{ textAlign: "right", marginTop: 10 }}>
+      {/* <div style={{ textAlign: "right", marginTop: 10 }}>
         <Button onClick={handleMagic}>Заполнить</Button>
-      </div>
+      </div> */}
     </Modal>
   );
 }

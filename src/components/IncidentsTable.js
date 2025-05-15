@@ -196,7 +196,7 @@ export default function IncidentsTable({
           return (
             <Button
               type="default"
-              onClick={() => onCloseIncident(record.documentId)}
+              onClick={() => onCloseIncident(record.incident.documentId)}
             >
               Выполнена
             </Button>

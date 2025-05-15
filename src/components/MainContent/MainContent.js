@@ -148,7 +148,8 @@ export default function MainContent() {
       endDateTime: `${endDate} ${endTime}`,
       restHours,
       status_incident: incident.status_incident,
-      // documentId: incident.documentId,
+      documentId: incident.documentId
+ 
     };
   });
 
