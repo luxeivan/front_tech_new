@@ -1,31 +1,37 @@
-//Заглушечка, комментим её, когда не надо
-import { redirect } from "next/navigation";
+//-------------------------------------------------
+// 1) Заглушка — пока ведутся работы
+//-------------------------------------------------
+"use client";
+import React from "react";
+import Portal404 from "@/components/client/Portal404/Portal404";
 
-export default async function Home() {
-  redirect("/stub");
+export default function Home() {
+  return <Portal404 />;
 }
 
-//А вот это раскоментиваем
+//-------------------------------------------------
+// 2) Рабочая версия
+//-------------------------------------------------
+
 
 // "use server";
+// import React from "react";
 // import MainContent from "@/components/MainContent/MainContent";
 // import { auth } from "@/config/auth";
 
 // export default async function Home() {
 //   const session = await auth();
 
-//   const { token } = false;
 //   return (
 //     <div>
-//       {session && (
+//       {session ? (
 //         <>
 //           <h1 style={{ textAlign: "center" }}>
 //             Добро пожаловать, {session.user?.name}
 //           </h1>
 //           <MainContent />
 //         </>
-//       )}
-//       {!session && (
+//       ) : (
 //         <h1 style={{ textAlign: "center", padding: 20 }}>
 //           Пожалуйста авторизируйтесь
 //         </h1>
