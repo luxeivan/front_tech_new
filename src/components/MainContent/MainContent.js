@@ -252,10 +252,10 @@ export default function MainContent() {
             <Button type="primary" onClick={() => setNewModalVisible(true)}>
               Новое ТН
             </Button>
-            <Button onClick={handleExportExcel}>Экспорт в Excel</Button>
+            {/* <Button onClick={handleExportExcel}>Экспорт в Excel</Button>
             <Link href="/stub">
               <Button>Статистика</Button>
-            </Link>
+            </Link> */}
           </div>
         </div>
 
