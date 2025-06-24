@@ -1,32 +1,23 @@
 "use client";
 import React, { useState } from "react";
-import { Typography, Button, Space, message } from "antd";
-
-const { Title, Text } = Typography;
+import { Button, Space, message } from "antd";
 
 /**
- * Блок «Отправка данных» для карточки инцидента
+ * Блок «Отправка данных» для карточки инцидента.
  *
  * @param {object}   props
- * @param {object}   props.incident       – объект инцидента
- * @param {Function} props.onSendTelegram – кол-бэк, который делает
- *                                         POST /api/telegram и
- *                                         PUT /api/incidents/:documentId
- *                                         (см. MainContent.js)
+ * @param {object}   props.incident        – объект-инцидент
+ * @param {Function} props.onSendTelegram  – callback(incident) → Promise
  */
 export default function SendDataControls({ incident, onSendTelegram }) {
   const [sending, setSending] = useState(false);
-  const [localSent, setLocalSent] = useState(!!incident.sent_to_telegram);
 
-  const handleTelegram = async () => {
-    if (localSent || sending) return; // уже отправили
+  const sendTelegram = async () => {
     setSending(true);
     try {
-      await onSendTelegram(incident); // ← один-единственный вызов
-      setLocalSent(true); // локально блокируем кнопку
+      await onSendTelegram(incident);
       message.success("Инцидент отправлен в Telegram");
-    } catch (err) {
-      console.error(err);
+    } catch {
       message.error("Не удалось отправить в Telegram");
     } finally {
       setSending(false);
@@ -34,30 +25,29 @@ export default function SendDataControls({ incident, onSendTelegram }) {
   };
 
   return (
-    <div style={{ marginTop: 16 }}>
-      <Title level={5}>Отправка данных</Title>
+    <Space direction="vertical" style={{ width: "100%" }}>
+      <Button
+        block
+        type="primary"
+        ghost={!!incident.sent_to_telegram}
+        disabled={!!incident.sent_to_telegram || sending}
+        loading={sending}
+        onClick={sendTelegram}
+      >
+        {incident.sent_to_telegram
+          ? "Отправлено в Telegram"
+          : "Отправить в Telegram"}
+      </Button>
 
-      <Space direction="vertical" size={8}>
-        <Button
-          type="primary"
-          disabled={localSent}
-          loading={sending}
-          onClick={handleTelegram}
-          block
-        >
-          {localSent ? "Отправлено в Telegram" : "Отправить в Telegram"}
-        </Button>
-
-        <Button disabled block>
-          Отправлено в АРМ ЕДДС
-        </Button>
-        <Button disabled block>
-          Отправлено на сайт Мособлэнерго
-        </Button>
-        <Button disabled block>
-          Отправлено на сайт Минэнерго
-        </Button>
-      </Space>
-    </div>
+      <Button block disabled>
+        Отправлено в АРМ ЕДДС
+      </Button>
+      <Button block disabled>
+        Отправлено на сайт Мособлэнерго
+      </Button>
+      <Button block disabled>
+        Отправлено на сайт Минэнерго
+      </Button>
+    </Space>
   );
 }

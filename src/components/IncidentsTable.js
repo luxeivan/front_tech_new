@@ -1,190 +1,206 @@
 "use client";
 import React from "react";
-import { Table, Button, Typography } from "antd";
+import {
+  Table,
+  Button,
+  Tag,
+  Typography,
+  Space,
+  Row,
+  Col,
+  Card,
+  Descriptions,
+} from "antd";
+import {
+  CalendarOutlined,
+  FieldTimeOutlined,
+  EnvironmentOutlined,
+} from "@ant-design/icons";
 import SendDataControls from "./SendDataControls";
 
 const { Title, Text } = Typography;
 
 export default function IncidentsTable({
-  dataSource, // массив данных, уже отфильтрованный / отсортированный
-  extractText, // функция извлечения текста (useIncidentsUtilsStore)
-  formatDate, // форматирование даты
-  formatTime, // форматирование времени
-  formatDateTime, // форматирование даты-времени
-  onCloseIncident, // кол-бэк «Выполнена»
-  onSendTelegram, // кол-бэк «Отправить в TG»
+  dataSource, // подготовленный массив строк
+  extractText, // utils-функция
+  formatDate,
+  formatTime,
+  formatDateTime,
+  onCloseIncident, // «Выполнена»
+  onSendTelegram, // колбэк отправки
 }) {
-  /* ─────────────── развернутая строка ─────────────── */
+  /* ─── «Карточка» раскрытой строки ─── */
   const expandedRowRender = (record) => {
-    const incident = record.incident;
+    const inc = record.incident;
+    const a = inc.AddressInfo ?? {};
+    const d = inc.DisruptionStats ?? {};
 
-    const cityName = incident.AddressInfo?.city_name ?? "нет";
-    const streetsArr = incident.AddressInfo?.Street ?? [];
-    const streets = streetsArr.length
-      ? streetsArr.map((s) => s.street_name).join(", ")
-      : "нет";
+    /* Адрес в одну строку */
+    const streetStr =
+      (a.Street ?? []).map((s) => s.street_name).join(", ") || "—";
 
     return (
-      <div style={{ background: "#fafafa", padding: 16 }}>
-        {/* ─── Основная информация ─── */}
-        <Title level={5}>Основная информация</Title>
-        <p>
-          <strong>Статус:</strong> {incident.status_incident ?? "нет"}
-        </p>
-        <p>
-          <strong>Дата начала:</strong> {formatDate(incident.start_date)}{" "}
-          {formatTime(incident.start_time)}
-        </p>
-        <p>
-          <strong>Прогноз восстановления:</strong>{" "}
-          {incident.estimated_restoration_time
-            ? formatDateTime(incident.estimated_restoration_time)
-            : "нет"}
-        </p>
-        {incident.end_date && incident.end_time && (
-          <p>
-            <strong>Дата окончания:</strong> {formatDate(incident.end_date)}{" "}
-            {formatTime(incident.end_time)}
-          </p>
-        )}
+      <Card bordered={false} style={{ background: "#fafafa" }}>
+        <Row gutter={[24, 24]}>
+          {/* Левая колонка: краткие сведения */}
+          <Col xs={24} md={12}>
+            <Descriptions
+              size="small"
+              column={1}
+              title={<Title level={5}>Общие сведения</Title>}
+              items={[
+                { label: "Статус", children: inc.status_incident || "—" },
+                {
+                  label: (
+                    <>
+                      <CalendarOutlined /> Дата начала
+                    </>
+                  ),
+                  children: `${formatDate(inc.start_date)} ${formatTime(
+                    inc.start_time
+                  )}`,
+                },
+                inc.estimated_restoration_time && {
+                  label: "Прогноз восстановления",
+                  children: formatDateTime(inc.estimated_restoration_time),
+                },
+                inc.end_date &&
+                  inc.end_time && {
+                    label: (
+                      <>
+                        <FieldTimeOutlined /> Дата окончания
+                      </>
+                    ),
+                    children: `${formatDate(inc.end_date)} ${formatTime(
+                      inc.end_time
+                    )}`,
+                  },
+              ].filter(Boolean)}
+            />
 
-        {/* ─── Описание ─── */}
-        <Title level={5}>Описание</Title>
-        <Text>{extractText(incident.description)}</Text>
+            <Descriptions
+              size="small"
+              column={1}
+              title={
+                <Title level={5} style={{ marginTop: 16 }}>
+                  Адрес
+                </Title>
+              }
+              items={[
+                {
+                  label: <EnvironmentOutlined />,
+                  children: (
+                    <Space wrap>
+                      <Tag color="blue">{a.city_name || "—"}</Tag>
+                      <Text>{streetStr}</Text>
+                    </Space>
+                  ),
+                },
+                {
+                  label: "Тип поселения",
+                  children: a.settlement_type || "—",
+                },
+                {
+                  label: "Тип застройки",
+                  children: a.building_type || "—",
+                },
+              ]}
+            />
+          </Col>
 
-        {incident.closure_description && (
-          <>
+          {/* Правая колонка: статистика + кнопки отправки */}
+          <Col xs={24} md={12}>
+            <Descriptions
+              size="small"
+              column={1}
+              title={<Title level={5}>Статистика отключения</Title>}
+              items={[
+                {
+                  label: "Нас. пунктов",
+                  children: d.affected_settlements ?? 0,
+                },
+                { label: "Жителей", children: d.affected_residents ?? 0 },
+                { label: "МКД", children: d.affected_mkd ?? 0 },
+                { label: "Больниц", children: d.affected_hospitals ?? 0 },
+                { label: "Поликлиник", children: d.affected_clinics ?? 0 },
+                { label: "Школ", children: d.affected_schools ?? 0 },
+                { label: "Детсадов", children: d.affected_kindergartens ?? 0 },
+                {
+                  label: "Бойлерных / котельн",
+                  children: d.boiler_shutdown ?? 0,
+                },
+              ]}
+            />
+
+            <SendDataControls incident={inc} onSendTelegram={onSendTelegram} />
+          </Col>
+
+          {/* Описание внизу на всю ширину */}
+          <Col span={24}>
             <Title level={5} style={{ marginTop: 16 }}>
-              Описание закрытия
+              Описание
             </Title>
-            <Text>{extractText(incident.closure_description)}</Text>
-          </>
-        )}
+            <Text>{extractText(inc.description)}</Text>
 
-        {/* ─── Адресная информация ─── */}
-        {incident.AddressInfo && (
-          <>
-            <Title level={5} style={{ marginTop: 16 }}>
-              Адресная информация
-            </Title>
-            <p>
-              <strong>Тип поселения:</strong>{" "}
-              {incident.AddressInfo.settlement_type ?? "нет"}
-            </p>
-            <p>
-              <strong>Город:</strong> {cityName}
-            </p>
-            <p>
-              <strong>Улицы:</strong> {streets}
-            </p>
-            <p>
-              <strong>Тип застройки:</strong>{" "}
-              {incident.AddressInfo.building_type ?? "нет"}
-            </p>
-          </>
-        )}
-
-        {/* ─── Статистика отключения ─── */}
-        {incident.DisruptionStats && (
-          <>
-            <Title level={5} style={{ marginTop: 16 }}>
-              Статистика отключения
-            </Title>
-            <p>
-              <strong>Отключено населенных пунктов:</strong>{" "}
-              {incident.DisruptionStats.affected_settlements ?? 0}
-            </p>
-            <p>
-              <strong>Отключено жителей:</strong>{" "}
-              {incident.DisruptionStats.affected_residents ?? 0}
-            </p>
-            <p>
-              <strong>Отключено МКД:</strong>{" "}
-              {incident.DisruptionStats.affected_mkd ?? 0}
-            </p>
-            <p>
-              <strong>Отключено больниц:</strong>{" "}
-              {incident.DisruptionStats.affected_hospitals ?? 0}
-            </p>
-            <p>
-              <strong>Отключено поликлиник:</strong>{" "}
-              {incident.DisruptionStats.affected_clinics ?? 0}
-            </p>
-            <p>
-              <strong>Отключено школ:</strong>{" "}
-              {incident.DisruptionStats.affected_schools ?? 0}
-            </p>
-            <p>
-              <strong>Отключено детсадов:</strong>{" "}
-              {incident.DisruptionStats.affected_kindergartens ?? 0}
-            </p>
-            <p>
-              <strong>Отключено бойлерных/котельн:</strong>{" "}
-              {incident.DisruptionStats.boiler_shutdown ?? 0}
-            </p>
-          </>
-        )}
-
-        {/* ─── Отправка данных ─── */}
-        <SendDataControls incident={incident} onSendTelegram={onSendTelegram} />
-      </div>
+            {inc.closure_description && (
+              <>
+                <Title level={5} style={{ marginTop: 16 }}>
+                  Описание закрытия
+                </Title>
+                <Text>{extractText(inc.closure_description)}</Text>
+              </>
+            )}
+          </Col>
+        </Row>
+      </Card>
     );
   };
 
-  /* ─────────────── колонки таблицы ─────────────── */
+  /* ─── колонки таблицы ─── */
   const columns = [
     {
-      title: "Городской округ",
+      title: "Город",
       dataIndex: "cityName",
-      key: "cityName",
       sorter: (a, b) => a.cityName.localeCompare(b.cityName),
-      sortDirections: ["ascend", "descend"],
     },
     {
       title: "Улицы",
       dataIndex: "streets",
-      key: "streets",
-      sorter: (a, b) => a.streets.localeCompare(b.streets),
-      sortDirections: ["ascend", "descend"],
+      ellipsis: true,
     },
     {
-      title: "Дата и время отключения",
+      title: "Начало",
       dataIndex: "startDateTime",
-      key: "startDateTime",
-      sorter: (a, b) => new Date(a.startDateTime) - new Date(b.startDateTime),
-      sortDirections: ["ascend", "descend"],
+      sorter: (a, b) =>
+        new Date(a.startDateTime).getTime() -
+        new Date(b.startDateTime).getTime(),
     },
     {
-      title: "Дата окончания",
+      title: "Окончание",
       dataIndex: "endDateTime",
-      key: "endDateTime",
-      render: (text, r) =>
-        r.status_incident?.trim() === "выполнена" ? text : "-",
+      render: (val, rec) =>
+        rec.status_incident?.trim() === "выполнена" ? val : "—",
     },
-    {
-      title: "Прогнозируемое время включения (ч)",
-      dataIndex: "restHours",
-      key: "restHours",
-    },
+    { title: "Прогноз (ч)", dataIndex: "restHours" },
     {
       title: "Действие",
-      key: "action",
-      render: (_, r) =>
-        r.status_incident?.trim() === "в работе" && (
-          <Button onClick={() => onCloseIncident(r.incident.documentId)}>
-            Выполнена
+      render: (_, rec) =>
+        rec.status_incident?.trim() === "в работе" && (
+          <Button
+            size="small"
+            type="link"
+            onClick={() => onCloseIncident(rec.incident.documentId)}
+          >
+            Завершить
           </Button>
         ),
     },
   ];
 
-  /* ─────────────── стили строк ─────────────── */
-  const rowClassName = (record) =>
-    record.status_incident?.trim() === "в работе"
-      ? "active-row"
-      : "completed-row";
+  /* ─── подчёркивание строк ─── */
+  const rowClassName = (r) =>
+    r.status_incident?.trim() === "в работе" ? "active-row" : "completed-row";
 
-  /* ─────────────── JSX ─────────────── */
   return (
     <Table
       columns={columns}
