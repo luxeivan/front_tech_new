@@ -1,31 +1,35 @@
+"use client";
 import React from "react";
-import { Table, Button, Switch, Typography } from "antd";
+import { Table, Button, Typography } from "antd";
+import SendDataControls from "./SendDataControls";
 
 const { Title, Text } = Typography;
 
 export default function IncidentsTable({
-  dataSource, // массив данных, уже отфильтрованный/отсортированный
-  extractText, // функция извлечения текста (из useIncidentsUtilsStore)
-  formatDate, // функция форматирования даты
-  formatTime, // функция форматирования времени
-  formatDateTime, // функция форматирования даты-времени
-  onCloseIncident, // коллбэк, когда пользователь нажимает "Выполнена"
-  onSendTelegram,
+  dataSource, // массив данных, уже отфильтрованный / отсортированный
+  extractText, // функция извлечения текста (useIncidentsUtilsStore)
+  formatDate, // форматирование даты
+  formatTime, // форматирование времени
+  formatDateTime, // форматирование даты-времени
+  onCloseIncident, // кол-бэк «Выполнена»
+  onSendTelegram, // кол-бэк «Отправить в TG»
 }) {
+  /* ─────────────── развернутая строка ─────────────── */
   const expandedRowRender = (record) => {
     const incident = record.incident;
 
-    const cityName = incident.AddressInfo?.city_name || "нет";
-    const streetsArr = incident.AddressInfo?.Street || [];
+    const cityName = incident.AddressInfo?.city_name ?? "нет";
+    const streetsArr = incident.AddressInfo?.Street ?? [];
     const streets = streetsArr.length
       ? streetsArr.map((s) => s.street_name).join(", ")
       : "нет";
 
     return (
       <div style={{ background: "#fafafa", padding: 16 }}>
+        {/* ─── Основная информация ─── */}
         <Title level={5}>Основная информация</Title>
         <p>
-          <strong>Статус:</strong> {incident.status_incident || "нет"}
+          <strong>Статус:</strong> {incident.status_incident ?? "нет"}
         </p>
         <p>
           <strong>Дата начала:</strong> {formatDate(incident.start_date)}{" "}
@@ -44,8 +48,10 @@ export default function IncidentsTable({
           </p>
         )}
 
+        {/* ─── Описание ─── */}
         <Title level={5}>Описание</Title>
         <Text>{extractText(incident.description)}</Text>
+
         {incident.closure_description && (
           <>
             <Title level={5} style={{ marginTop: 16 }}>
@@ -55,6 +61,7 @@ export default function IncidentsTable({
           </>
         )}
 
+        {/* ─── Адресная информация ─── */}
         {incident.AddressInfo && (
           <>
             <Title level={5} style={{ marginTop: 16 }}>
@@ -62,7 +69,7 @@ export default function IncidentsTable({
             </Title>
             <p>
               <strong>Тип поселения:</strong>{" "}
-              {incident.AddressInfo.settlement_type || "нет"}
+              {incident.AddressInfo.settlement_type ?? "нет"}
             </p>
             <p>
               <strong>Город:</strong> {cityName}
@@ -72,11 +79,12 @@ export default function IncidentsTable({
             </p>
             <p>
               <strong>Тип застройки:</strong>{" "}
-              {incident.AddressInfo.building_type || "нет"}
+              {incident.AddressInfo.building_type ?? "нет"}
             </p>
           </>
         )}
 
+        {/* ─── Статистика отключения ─── */}
         {incident.DisruptionStats && (
           <>
             <Title level={5} style={{ marginTop: 16 }}>
@@ -84,72 +92,46 @@ export default function IncidentsTable({
             </Title>
             <p>
               <strong>Отключено населенных пунктов:</strong>{" "}
-              {incident.DisruptionStats.affected_settlements || "0"}
+              {incident.DisruptionStats.affected_settlements ?? 0}
             </p>
             <p>
               <strong>Отключено жителей:</strong>{" "}
-              {incident.DisruptionStats.affected_residents || "0"}
+              {incident.DisruptionStats.affected_residents ?? 0}
             </p>
             <p>
               <strong>Отключено МКД:</strong>{" "}
-              {incident.DisruptionStats.affected_mkd || "0"}
+              {incident.DisruptionStats.affected_mkd ?? 0}
             </p>
             <p>
               <strong>Отключено больниц:</strong>{" "}
-              {incident.DisruptionStats.affected_hospitals || "0"}
+              {incident.DisruptionStats.affected_hospitals ?? 0}
             </p>
             <p>
               <strong>Отключено поликлиник:</strong>{" "}
-              {incident.DisruptionStats.affected_clinics || "0"}
+              {incident.DisruptionStats.affected_clinics ?? 0}
             </p>
             <p>
               <strong>Отключено школ:</strong>{" "}
-              {incident.DisruptionStats.affected_schools || "0"}
+              {incident.DisruptionStats.affected_schools ?? 0}
             </p>
             <p>
               <strong>Отключено детсадов:</strong>{" "}
-              {incident.DisruptionStats.affected_kindergartens || "0"}
+              {incident.DisruptionStats.affected_kindergartens ?? 0}
             </p>
             <p>
               <strong>Отключено бойлерных/котельн:</strong>{" "}
-              {incident.DisruptionStats.boiler_shutdown || "0"}
+              {incident.DisruptionStats.boiler_shutdown ?? 0}
             </p>
           </>
         )}
 
-        <Title level={5} style={{ marginTop: 16 }}>
-          Отправка данных
-        </Title>
-        {/* <p>
-          <strong>Отправлено в Telegram:</strong>{" "}
-          <Switch checked={!!incident.sent_to_telegram} disabled />
-        </p> */}
-
-        <p>
-          <strong>Отправлено в Telegram:</strong>{" "}
-          <Switch
-            checked={!!incident.sent_to_telegram}
-            disabled={!!incident.sent_to_telegram} // уже отправили → серый
-            onChange={() => onSendTelegram(incident)} /*  ← click */
-          />
-        </p>
-
-        <p>
-          <strong>Отправлено в АРМ ЕДДС:</strong>{" "}
-          <Switch checked={!!incident.sent_to_arm_edds} disabled />
-        </p>
-        <p>
-          <strong>Отправлено на сайт Мособлэнерго:</strong>{" "}
-          <Switch checked={!!incident.sent_to_moenergo} disabled />
-        </p>
-        <p>
-          <strong>Отправлено на сайт Минэнерго:</strong>{" "}
-          <Switch checked={!!incident.sent_to_minenergo} disabled />
-        </p>
+        {/* ─── Отправка данных ─── */}
+        <SendDataControls incident={incident} onSendTelegram={onSendTelegram} />
       </div>
     );
   };
 
+  /* ─────────────── колонки таблицы ─────────────── */
   const columns = [
     {
       title: "Городской округ",
@@ -169,19 +151,15 @@ export default function IncidentsTable({
       title: "Дата и время отключения",
       dataIndex: "startDateTime",
       key: "startDateTime",
-      sorter: (a, b) => {
-        const tA = new Date(a.startDateTime).getTime();
-        const tB = new Date(b.startDateTime).getTime();
-        return tA - tB;
-      },
+      sorter: (a, b) => new Date(a.startDateTime) - new Date(b.startDateTime),
       sortDirections: ["ascend", "descend"],
     },
     {
       title: "Дата окончания",
       dataIndex: "endDateTime",
       key: "endDateTime",
-      render: (text, record) =>
-        record.status_incident?.trim() === "выполнена" ? text : "-",
+      render: (text, r) =>
+        r.status_incident?.trim() === "выполнена" ? text : "-",
     },
     {
       title: "Прогнозируемое время включения (ч)",
@@ -191,28 +169,22 @@ export default function IncidentsTable({
     {
       title: "Действие",
       key: "action",
-      render: (_, record) => {
-        if (record.status_incident?.trim() === "в работе") {
-          return (
-            <Button
-              type="default"
-              onClick={() => onCloseIncident(record.incident.documentId)}
-            >
-              Выполнена
-            </Button>
-          );
-        }
-        return null;
-      },
+      render: (_, r) =>
+        r.status_incident?.trim() === "в работе" && (
+          <Button onClick={() => onCloseIncident(r.incident.documentId)}>
+            Выполнена
+          </Button>
+        ),
     },
   ];
 
-  // Функция подсветки строк
+  /* ─────────────── стили строк ─────────────── */
   const rowClassName = (record) =>
     record.status_incident?.trim() === "в работе"
       ? "active-row"
       : "completed-row";
 
+  /* ─────────────── JSX ─────────────── */
   return (
     <Table
       columns={columns}

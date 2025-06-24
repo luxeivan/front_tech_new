@@ -148,8 +148,7 @@ export default function MainContent() {
       endDateTime: `${endDate} ${endTime}`,
       restHours,
       status_incident: incident.status_incident,
-      documentId: incident.documentId
- 
+      documentId: incident.documentId,
     };
   });
 
@@ -163,14 +162,14 @@ export default function MainContent() {
   // ✅ handleSendTelegram — сразу используем incident.documentId
   const handleSendTelegram = async (incident) => {
     try {
-      // 1. Посылаем сообщение боту
+      /* 1. Telegram */
       await fetch("/api/telegram", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ incident }),
       });
 
-      // 2. Помечаем инцидент в Strapi (работаем по documentId!)
+      /* 2. Strapi (работаем по documentId) */
       await fetch(
         `${process.env.NEXT_PUBLIC_STRAPI_URL}/api/incidents/${incident.documentId}`,
         {
@@ -183,8 +182,9 @@ export default function MainContent() {
         }
       );
 
+      /* 3. ------ никакого fetchIncidents()! ------ */
+      markSentToTelegram(incident.documentId); // локально блокируем кнопку
       message.success("Инцидент отправлен в Telegram");
-      fetchIncidents(session.user.jwt);
     } catch (err) {
       console.error(err);
       message.error("Не удалось отправить в Telegram");
