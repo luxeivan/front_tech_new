@@ -1,4 +1,4 @@
-"use client"; // обязательно в начале файла
+"use client"; 
 import React, { useEffect, useState } from "react";
 import {
   Spin,
