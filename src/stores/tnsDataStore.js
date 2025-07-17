@@ -22,4 +22,20 @@ export const useTnsDataStore = create((set) => ({
       set({ loading: false });
     }
   },
+
+  /* локально изменить значение одного поля для конкретного ТН */
+  updateField: (tnId, fieldKey, newValue) =>
+    set((state) => ({
+      tns: state.tns.map((tn) =>
+        tn.id === tnId
+          ? {
+              ...tn,
+              [fieldKey]: {
+                ...(tn[fieldKey] || {}),
+                value: newValue,
+              },
+            }
+          : tn
+      ),
+    })),
 }));

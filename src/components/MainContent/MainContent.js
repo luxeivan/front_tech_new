@@ -9,11 +9,15 @@ import {
   Pagination,
   ConfigProvider,
   Space,
+  Descriptions,
+  Modal,
+  Input,
+  message,
 } from "antd";
 import ru_RU from "antd/locale/ru_RU";
 import dayjs from "dayjs";
 import "dayjs/locale/ru";
-import { ReloadOutlined } from "@ant-design/icons";
+import { ReloadOutlined, EditOutlined } from "@ant-design/icons";
 import { useSession } from "next-auth/react";
 
 import { useTnsDataStore } from "@/stores/tnsDataStore";
@@ -28,7 +32,7 @@ export default function MainContent() {
   const token = session?.user?.jwt;
 
   /* store */
-  const { tns, loading, error, fetchTns } = useTnsDataStore();
+  const { tns, loading, error, fetchTns, updateField } = useTnsDataStore();
 
   /* fetch on mount / token change */
   useEffect(() => {
@@ -48,9 +52,55 @@ export default function MainContent() {
   const sliceStart = (page - 1) * pageSize;
   const currentRows = tns.slice(sliceStart, sliceStart + pageSize);
 
+  /* inline‑edit modal */
+  const [editing, setEditing] = useState(null); // { tnId, docId, fieldKey, label }
+  const [editValue, setEditValue] = useState("");
+
+  const openEdit = (tnId, docId, fieldKey, label, value) => {
+    setEditing({ tnId, docId, fieldKey, label });
+    setEditValue(value ?? "");
+  };
+
+  const saveEdit = async () => {
+    if (!editing) return;
+    const { tnId, docId, fieldKey } = editing;
+    const newVal = editValue?.trim();
+
+    // 1) сразу обновляем в сторе
+    updateField(tnId, fieldKey, newVal);
+
+    // 2) пытаемся сохранить на сервере
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_STRAPI_URL}/api/tns/${docId}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            data: { [fieldKey]: { value: newVal } },
+          }),
+        }
+      );
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      message.success("Поле обновлено");
+    } catch (e) {
+      console.error(e);
+      message.error("Не удалось сохранить на сервере");
+    } finally {
+      setEditing(null);
+    }
+  };
+
   /* map to table rows */
   const dataSource = currentRows.map((item) => ({
     key: item.id,
+    raw: item,
     number: item.F81_010_NUMBER?.value ?? "—",
     dispatcher: item.CREATE_USER?.value ?? "—",
     status: item.STATUS_NAME?.value ?? "—",
@@ -65,6 +115,56 @@ export default function MainContent() {
     { title: "Статус", dataIndex: "status", key: "status" },
     { title: "Дата/время", dataIndex: "eventDate", key: "eventDate" },
   ];
+
+  /* карточка раскрытия: перебираем все компоненты с label/value */
+  const expandedRowRender = (record) => {
+    const items = Object.entries(record.raw)
+      .filter(
+        ([, v]) =>
+          v &&
+          typeof v === "object" &&
+          "label" in v &&
+          v.value !== undefined &&
+          v.value !== null &&
+          v.value !== ""
+      )
+      .map(([key, v]) => ({
+        key,
+        label: v.label,
+        value:
+          typeof v.value === "string" || typeof v.value === "number"
+            ? String(v.value)
+            : JSON.stringify(v.value),
+        canEdit: v.edit === "Да",
+      }));
+
+    return (
+      <Descriptions
+        title={null}
+        bordered
+        size="small"
+        column={2}
+        items={items.map((it) => ({
+          key: it.key,
+          label: it.label,
+          children: (
+            <>
+              {it.value}{" "}
+              {it.canEdit && (
+                <EditOutlined
+                  style={{ marginLeft: 8, cursor: "pointer" }}
+                  onClick={() => {
+                    const docId = record.raw.documentId;
+                    openEdit(record.raw.id, docId, it.key, it.label, it.value);
+                  }}
+                />
+              )}
+            </>
+          ),
+        }))}
+      />
+    );
+  };
 
   return (
     <ConfigProvider locale={ru_RU}>
@@ -103,6 +203,8 @@ export default function MainContent() {
               pagination={false}
               bordered
               size="middle"
+              expandable={{ expandedRowRender }}
+              rowKey="key"
             />
             <div style={{ marginTop: 20, textAlign: "center" }}>
               <Pagination
@@ -115,6 +217,20 @@ export default function MainContent() {
           </>
         )}
       </div>
+      <Modal
+        title={editing?.label}
+        open={!!editing}
+        onOk={saveEdit}
+        onCancel={() => setEditing(null)}
+        okText="Сохранить"
+        cancelText="Отмена"
+      >
+        <Input
+          value={editValue}
+          onChange={(e) => setEditValue(e.target.value)}
+          autoFocus
+        />
+      </Modal>
     </ConfigProvider>
   );
 }
