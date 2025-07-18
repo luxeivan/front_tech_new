@@ -2,14 +2,60 @@ import { NextResponse } from "next/server";
 
 const STRAPI_URL = process.env.NEXT_PUBLIC_STRAPI_URL;
 
+function logBlock(title, obj = "") {
+  const stamp = new Date().toISOString();
+  console.log(`\n==== ${title} @ ${stamp} ===`);
+  if (obj !== "") console.dir(obj, { depth: null, colors: true });
+  console.log("================================\n");
+}
+
+// корректный роут для коллекции «Социальные объекты» (plural API ID)
+const SO_ENDPOINT = "/api/soczialnye-obekties";
+const SO_COMP_KEY = "SocialObjects";
+const SO_REL_FIELD = "SocialObjects";
+
+/** Унифицированный запрос к Strapi (возвращает id созданной/обновлённой записи) */
+async function strapiReq(method, endpoint, payload, auth = "") {
+  logBlock(`STRAPI ➜ ${method} ${endpoint}`, payload);
+
+  const res = await fetch(`${STRAPI_URL}${endpoint}`, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: auth,
+    },
+    body: payload ? JSON.stringify(payload) : undefined,
+  });
+
+  const raw = await res.text();
+
+  let data = {};
+  try {
+    data = raw ? JSON.parse(raw) : {};
+  } catch {
+    data = { error: { message: raw.trim() } };
+  }
+
+  if (!res.ok) {
+    logBlock(`STRAPI ✖ ${method} ${endpoint} — ERROR ${res.status}`, data);
+    const msg = data?.error?.message || `Strapi ${method} ${endpoint} error`;
+    throw new Error(msg);
+  }
+
+  logBlock(`STRAPI ✔ ${method} ${endpoint} — OK`, data);
+  return data.data?.id;
+}
+// ---------------------------------------------------------------------------
+
 export async function POST(req) {
   try {
     const auth = req.headers.get("authorization") || "";
-    const { MetaData, Data } = await req.json();
+    const { MetaData = {}, Data } = await req.json();
 
-    if (!MetaData || !Array.isArray(Data))
+    // допустим отсутствие MetaData — по умолчанию берём пустой объект
+    if (!Array.isArray(Data) || Data.length === 0)
       return NextResponse.json(
-        { error: "Неверный формат: ждём { MetaData, Data: [...] }" },
+        { error: "Неверный формат: ждём { Data: [...] }" },
         { status: 400 }
       );
 
@@ -34,106 +80,32 @@ export async function POST(req) {
     const results = [];
 
     for (const row of Data) {
-      const payload = { data: mapValue(row) };
+      // отделяем соц‑объекты от остальных полей
+      const { SocialObjects: rawSO = [], ...rest } = row;
 
-      const r = await fetch(`${STRAPI_URL}/api/tns`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: auth,
-        },
-        body: JSON.stringify(payload),
-      });
+      // обычные поля ТН
+      const tnData = mapValue(rest);
 
-      const res = await r.json();
-      if (!r.ok) throw new Error(res?.error?.message || "Ошибка Strapi");
-      results.push(res);
+      // сначала создаём сами соц‑объекты
+      const soComponents = [];
+      for (const so of rawSO) {
+        const soPayload = { data: mapValue(so) };
+        const soId = await strapiReq("POST", SO_ENDPOINT, soPayload, auth);
+        // компонент выглядит так: { SocialObjects: soId }
+        soComponents.push({ [SO_REL_FIELD]: soId });
+      }
+
+      if (soComponents.length) tnData[SO_COMP_KEY] = soComponents;
+
+      // создаём/сохраняем ТН
+      const tnId = await strapiReq("POST", "/api/tns", { data: tnData }, auth);
+      results.push({ id: tnId });
+      logBlock("TN created", { tnId, soCount: soComponents.length });
     }
 
     return NextResponse.json({ status: "ok", results });
   } catch (e) {
+    logBlock("MODUS route unhandled error", e.message);
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }
-
-// import { NextResponse } from "next/server";
-
-// const STRAPI = process.env.NEXT_PUBLIC_STRAPI_URL;
-
-// export async function POST(req) {
-//   try {
-
-//     /* ---------- 1. Проверяем заголовок Authorization ---------- */
-//     const auth = req.headers.get("authorization") || "";
-//     if (!auth.toLowerCase().startsWith("bearer ")) {
-//       return NextResponse.json(
-//         {
-//           status: "error",
-//           message: "Требуется заголовок Authorization: Bearer <token>",
-//         },
-//         { status: 401 }
-//       );
-//     }
-//     const token = auth.split(" ")[1];
-
-//     /* ---------- 2. Валидируем токен у Strapi ---------- */
-//     const check = await fetch(`${STRAPI}/api/users/me`, {
-//       headers: { Authorization: `Bearer ${token}` },
-//     });
-
-//     if (!check.ok) {
-//       return NextResponse.json(
-//         { status: "error", message: "Недействительный или просроченный токен" },
-//         { status: 401 }
-//       );
-//     }
-
-//     // Если нужно ограничить ролью (например, только role.type === 'modus'):
-//     // const user = await check.json();
-//     // if (user.role?.type !== 'modus') {
-//     //   return NextResponse.json(
-//     //     { status: 'error', message: 'Недостаточно прав' },
-//     //     { status: 403 }
-//     //   );
-//     // }
-
-//     /* ---------- 3. Читаем тело запроса ---------- */
-//     let data;
-//     try {
-//       data = await req.json();
-//     } catch {
-//       return NextResponse.json(
-//         { status: "error", message: "Тело запроса не является JSON" },
-//         { status: 400 }
-//       );
-//     }
-
-//     if (
-//       !data || // null / undefined
-//       Array.isArray(data) || // массив
-//       Object.keys(data).length === 0 // пустой объект
-//     ) {
-//       return NextResponse.json(
-//         { status: "error", message: "Пустой JSON-объект" },
-//         { status: 400 }
-//       );
-//     }
-
-//     /* ---------- 4. Здесь будет логика записи в Strapi ---------- */
-
-//     return NextResponse.json({ status: "ok" });
-//   } catch (err) {
-//     console.error("Modus API error:", err);
-//     return NextResponse.json(
-//       { status: "error", message: "Внутренняя ошибка сервера" },
-//       { status: 500 }
-//     );
-//   }
-// }
-
-// export function GET() {
-//   return NextResponse.json(
-//     { status: "error", message: "Используйте POST для отправки данных" },
-//     { status: 405 }
-//   );
-// }
