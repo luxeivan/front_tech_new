@@ -1,4 +1,3 @@
-// src/app/api/modus/route.js
 import { NextResponse } from "next/server";
 
 const STRAPI_URL = process.env.NEXT_PUBLIC_STRAPI_URL;
@@ -10,12 +9,10 @@ function logBlock(title, obj = "") {
   console.log("================================\n");
 }
 
-// корректный роут для коллекции «Социальные объекты» (plural API ID)
 const SO_ENDPOINT = "/api/soczialnye-obekties";
-const SO_COMP_KEY = "SocialObjects"; // relation‑component key inside TN
-const SO_REL_FIELD = "SocialObjects"; // relation field inside component (this is also the name of the component itself in TH)
+const SO_COMP_KEY = "SocialObjects"; 
+const SO_REL_FIELD = "SocialObjects";
 
-/** Унифицированный запрос к Strapi (возвращает id созданной/обновлённой записи) */
 async function strapiReq(method, endpoint, payload, auth = "") {
   logBlock(`STRAPI ➜ ${method} ${endpoint}`, payload);
 
@@ -46,26 +43,18 @@ async function strapiReq(method, endpoint, payload, auth = "") {
   logBlock(`STRAPI ✔ ${method} ${endpoint} — OK`, data);
   return data.data?.id;
 }
-// ---------------------------------------------------------------------------
-
 export async function POST(req) {
   try {
     const auth = req.headers.get("authorization") || "";
     const { MetaData = {}, Data } = await req.json();
-
-    // допустим отсутствие MetaData — по умолчанию берём пустой объект
     if (!Array.isArray(Data) || Data.length === 0)
       return NextResponse.json(
         { error: "Неверный формат: ждём { Data: [...] }" },
         { status: 400 }
       );
-
-    // Изменения здесь: mapValue теперь не добавляет 'label',
-    // чтобы Strapi использовал свои дефолтные лейблы.
     const mapValue = (rec) =>
       Object.fromEntries(
         Object.entries(rec).map(([k, v]) => {
-          // MetaData[k] больше не используется для label
           return [
             k,
             {
@@ -74,9 +63,6 @@ export async function POST(req) {
                 /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}[+Z-]/.test(v)
                   ? new Date(v).toISOString()
                   : v,
-              // label удален, Strapi будет использовать свой дефолтный
-              // edit и filter, если они есть в MetaData, могут быть добавлены,
-              // но для label это не нужно.
             },
           ];
         })
@@ -96,21 +82,10 @@ export async function POST(req) {
       for (const so of rawSO) {
         const soPayload = { data: mapValue(so) };
         const soId = await strapiReq("POST", SO_ENDPOINT, soPayload, auth);
-
-        // Исправление здесь: компонент с отношением должен указывать на ID созданного элемента
-        // Если 'SocialObjects' это имя компонента и он содержит отношение 'SocialObjects',
-        // то структура должна быть { component_name: { relation_field_name: soId } }
-        // Или, если это просто отношение к коллекции "Социальные объекты" напрямую в компоненте SocialObjects,
-        // то { field_name: soId }
-        // Исходя из вашего скриншота "Снимок экрана 2025-07-18 в 10.40.08.png",
-        // SocialObjects - это repeatable компонент, который внутри содержит поле SocialObjects (relation with Социальные объекты).
-        // Поэтому структура должна быть { SocialObjects: soId }
         soComponents.push({ SocialObjects: soId });
       }
 
       if (soComponents.length) {
-        // Здесь мы назначаем массив компонентов в поле SO_COMP_KEY
-        // Убедитесь, что SO_COMP_KEY ('SocialObjects') правильно соответствует API ID компонента в Strapi
         tnData[SO_COMP_KEY] = soComponents;
       }
 
