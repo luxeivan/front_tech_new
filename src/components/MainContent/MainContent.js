@@ -11,6 +11,7 @@ import {
   ConfigProvider,
   Space,
   Descriptions,
+  Divider,
   Modal,
   Input,
   message,
@@ -27,28 +28,24 @@ dayjs.locale("ru");
 
 const { Title } = Typography;
 
-// --- helper: fetch & show Social Objects documentIds ----------------------
+// --- helper: fetch & show Social Objects full info ----------------------
 const SoInfo = ({ tnId, docId }) => {
-  const [ids, setIds] = React.useState(null);
-  const { data: session } = useSession();
-  const token = session?.user?.jwt;
+  const [docIds, setDocIds]   = React.useState(null);   // array of linked ids
+  const [details, setDetails] = React.useState({});     // { docId : socialObject }
+  const { data: session }     = useSession();
+  const token                 = session?.user?.jwt;
 
+  // 1) запрашиваем список documentId соц‑объектов, связанных с ТН
   React.useEffect(() => {
     let cancelled = false;
 
-    async function load() {
+    (async () => {
       try {
         const res = await fetch(
           `${process.env.NEXT_PUBLIC_STRAPI_URL}/api/tns/${docId}?populate[SocialObjects][populate]=*`,
-          {
-            headers: {
-              Authorization: token ? `Bearer ${token}` : undefined,
-            },
-          }
+          { headers: { Authorization: token ? `Bearer ${token}` : undefined } }
         );
-
         const json = await res.json();
-
         const list = Array.isArray(json?.data?.SocialObjects)
           ? json.data.SocialObjects.flatMap((c) =>
               Array.isArray(c.SocialObjects)
@@ -60,30 +57,92 @@ const SoInfo = ({ tnId, docId }) => {
           : [];
 
         if (!cancelled) {
-          setIds(list);
+          setDocIds(list);
           console.log(
             `Соц объекты для ТН ${tnId}:`,
             list.length ? `${list.length} → ${list.join(", ")}` : "нет"
           );
         }
       } catch (e) {
-        console.error("Ошибка загрузки соц объектов", e);
+        console.error("Ошибка загрузки соц‑объектов (список)", e);
       }
-
       return () => {
         cancelled = true;
       };
-    }
-
-    load();
+    })();
   }, [tnId, docId, token]);
 
-  if (!ids || ids.length === 0) return null;
+  // 2) для каждого documentId вытягиваем детальную инфу (кэшируется в `details`)
+  React.useEffect(() => {
+    if (!docIds) return;
+    docIds.forEach(async (id) => {
+      if (details[id] !== undefined) return; // уже есть / грузится
+
+      // помечаем как «loading»
+      setDetails((p) => ({ ...p, [id]: null }));
+
+      try {
+        const url =
+          `${process.env.NEXT_PUBLIC_STRAPI_URL}` +
+          `/api/soczialnye-obekties?filters[documentId][$eq]=${id}&populate=*`;
+        const res  = await fetch(url, {
+          headers: { Authorization: token ? `Bearer ${token}` : undefined },
+        });
+        const json = await res.json();
+        const so   = json?.data?.[0] ?? undefined; // undefined → не найден
+
+        setDetails((p) => ({ ...p, [id]: so }));
+      } catch (e) {
+        console.error("Ошибка загрузки соц‑объекта", id, e);
+        setDetails((p) => ({ ...p, [id]: undefined }));
+      }
+    });
+  }, [docIds, details, token]);
+
+  if (!docIds || docIds.length === 0) return null;
 
   return (
-    <div style={{ fontWeight: 600, marginBottom: 8 }}>
-      Соц объекты ({ids.length}): {ids.join(", ")}
-    </div>
+    <>
+      <Divider orientation="left" style={{ marginTop: 12 }}>
+        Соц&nbsp;объекты ({docIds.length})
+      </Divider>
+
+      {docIds.map((id) => {
+        const so = details[id];
+        if (so === null)
+          return (
+            <div key={id} style={{ marginBottom: 8 }}>
+              {id} &nbsp;— загрузка…
+            </div>
+          );
+        if (so === undefined)
+          return (
+            <div key={id} style={{ marginBottom: 8, color: "#c41d7f" }}>
+              {id} &nbsp;— не найден
+            </div>
+          );
+
+        const fields = Object.entries(so).filter(
+          ([, v]) => v && typeof v === "object" && "label" in v && v.value
+        );
+
+        return (
+          <Descriptions
+            key={id}
+            size="small"
+            bordered
+            column={2}
+            title={so.Name?.value || id}
+            style={{ marginBottom: 12 }}
+            items={fields.map(([k, v]) => ({
+              key: k,
+              label: v.label,
+              children: String(v.value),
+            }))}
+          />
+        );
+      })}
+    </>
   );
 };
 // -------------------------------------------------------------------------
