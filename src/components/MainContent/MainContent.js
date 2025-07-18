@@ -27,20 +27,75 @@ dayjs.locale("ru");
 
 const { Title } = Typography;
 
-export default function MainContent() {
-  /* auth */
+// --- helper: fetch & show Social Objects documentIds ----------------------
+const SoInfo = ({ tnId, docId }) => {
+  const [ids, setIds] = React.useState(null);
   const { data: session } = useSession();
   const token = session?.user?.jwt;
 
-  /* store */
-  const { tns, loading, error, fetchTns, updateField } = useTnsDataStore();
+  React.useEffect(() => {
+    let cancelled = false;
 
-  /* fetch on mount / token change */
+    async function load() {
+      try {
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_STRAPI_URL}/api/tns/${docId}?populate[SocialObjects][populate]=*`,
+          {
+            headers: {
+              Authorization: token ? `Bearer ${token}` : undefined,
+            },
+          }
+        );
+
+        const json = await res.json();
+
+        const list = Array.isArray(json?.data?.SocialObjects)
+          ? json.data.SocialObjects.flatMap((c) =>
+              Array.isArray(c.SocialObjects)
+                ? c.SocialObjects
+                    .map((o) => o.documentId)
+                    .filter(Boolean)
+                : []
+            )
+          : [];
+
+        if (!cancelled) {
+          setIds(list);
+          console.log(
+            `Соц объекты для ТН ${tnId}:`,
+            list.length ? `${list.length} → ${list.join(", ")}` : "нет"
+          );
+        }
+      } catch (e) {
+        console.error("Ошибка загрузки соц объектов", e);
+      }
+
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    load();
+  }, [tnId, docId, token]);
+
+  if (!ids || ids.length === 0) return null;
+
+  return (
+    <div style={{ fontWeight: 600, marginBottom: 8 }}>
+      Соц объекты ({ids.length}): {ids.join(", ")}
+    </div>
+  );
+};
+// -------------------------------------------------------------------------
+
+export default function MainContent() {
+  const { data: session } = useSession();
+  const token = session?.user?.jwt;
+  const { tns, loading, error, fetchTns, updateField } = useTnsDataStore();
   useEffect(() => {
     if (token) fetchTns(token);
   }, [token, fetchTns]);
 
-  /* auto‑refresh every 2 min */
   useEffect(() => {
     if (!token) return;
     const id = setInterval(() => fetchTns(token), 120_000);
@@ -174,30 +229,39 @@ export default function MainContent() {
       }));
 
     return (
-      <Descriptions
-        title={null}
-        bordered
-        size="small"
-        column={2}
-        items={items.map((it) => ({
-          key: it.key,
-          label: it.label,
-          children: (
-            <>
-              {it.value}{" "}
-              {it.canEdit && (
-                <EditOutlined
-                  style={{ marginLeft: 8, cursor: "pointer" }}
-                  onClick={() => {
-                    const docId = record.raw.documentId;
-                    openEdit(record.raw.id, docId, it.key, it.label, it.value);
-                  }}
-                />
-              )}
-            </>
-          ),
-        }))}
-      />
+      <>
+        <SoInfo tnId={record.raw.id} docId={record.raw.documentId} />
+
+        <Descriptions
+          bordered
+          size="small"
+          column={2}
+          items={items.map((it) => ({
+            key: it.key,
+            label: it.label,
+            children: (
+              <>
+                {it.value}{" "}
+                {it.canEdit && (
+                  <EditOutlined
+                    style={{ marginLeft: 8, cursor: "pointer" }}
+                    onClick={() => {
+                      const docId = record.raw.documentId;
+                      openEdit(
+                        record.raw.id,
+                        docId,
+                        it.key,
+                        it.label,
+                        it.value
+                      );
+                    }}
+                  />
+                )}
+              </>
+            ),
+          }))}
+        />
+      </>
     );
   };
 
