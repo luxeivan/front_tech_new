@@ -301,7 +301,7 @@ export default function MainContent() {
                 {it.value}{" "}
                 {it.canEdit && (
                   <EditOutlined
-                    style={{ marginLeft: 8, cursor: "pointer" }}
+                    style={{ marginLeft: 8, cursor: "pointer", color: "#389e0d" }}
                     onClick={() => {
                       const docId = record.raw.documentId;
                       openEdit(
@@ -316,6 +316,13 @@ export default function MainContent() {
                 )}
               </>
             ),
+            // подсветка всей ячейки, если поле редактируемое
+            ...(it.canEdit
+              ? {
+                  labelStyle: { background: "#f6ffed" },
+                  contentStyle: { background: "#f6ffed" },
+                }
+              : {}),
           }))}
         />
         <SoInfo tnId={record.raw.id} docId={record.raw.documentId} />
