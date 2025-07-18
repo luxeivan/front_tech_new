@@ -10,7 +10,7 @@ function logBlock(title, obj = "") {
 }
 
 const SO_ENDPOINT = "/api/soczialnye-obekties";
-const SO_COMP_KEY = "SocialObjects"; 
+const SO_COMP_KEY = "SocialObjects";
 const SO_REL_FIELD = "SocialObjects";
 
 async function strapiReq(method, endpoint, payload, auth = "") {
@@ -82,7 +82,8 @@ export async function POST(req) {
       for (const so of rawSO) {
         const soPayload = { data: mapValue(so) };
         const soId = await strapiReq("POST", SO_ENDPOINT, soPayload, auth);
-        soComponents.push({ SocialObjects: soId });
+        console.log("!!!!!!!!!!", soId);
+        soComponents.push({ SocialObjects: { SocialObjects: soId } });
       }
 
       if (soComponents.length) {

@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import {
   Table,
   Spin,
@@ -7,6 +7,7 @@ import {
   Typography,
   Button,
   Pagination,
+  Select,
   ConfigProvider,
   Space,
   Descriptions,
@@ -47,10 +48,44 @@ export default function MainContent() {
   }, [token, fetchTns]);
 
   /* pagination */
+  /* dynamic filters */
+  const filterableFields = useMemo(() => {
+    const set = new Set();
+    tns.forEach((t) => {
+      Object.entries(t).forEach(([k, v]) => {
+        if (v && typeof v === "object" && v.filter === "Да") set.add(k);
+      });
+    });
+    return Array.from(set);
+  }, [tns]);
+
+  // filters object: { fieldKey : selectedValue }
+  const [filters, setFilters] = useState({});
+
+  // whenever available filterable fields change – initialise to "Все"
+  useEffect(() => {
+    const initial = {};
+    filterableFields.forEach((k) => (initial[k] = "Все"));
+    setFilters(initial);
+  }, [filterableFields]);
+
+  const updateFilter = (fieldKey, value) =>
+    setFilters((prev) => ({ ...prev, [fieldKey]: value }));
+
   const [page, setPage] = useState(1);
   const pageSize = 10;
   const sliceStart = (page - 1) * pageSize;
-  const currentRows = tns.slice(sliceStart, sliceStart + pageSize);
+
+  /* filtering of rows according to `filters` */
+  const filteredTns = tns.filter((item) =>
+    filterableFields.every((key) => {
+      const selected = filters[key] ?? "Все";
+      if (selected === "Все") return true;
+      return (item[key]?.value ?? "—") === selected;
+    })
+  );
+
+  const currentRows = filteredTns.slice(sliceStart, sliceStart + pageSize);
 
   /* inline‑edit modal */
   const [editing, setEditing] = useState(null); // { tnId, docId, fieldKey, label }
@@ -186,6 +221,26 @@ export default function MainContent() {
             Обновить
           </Button>
         </Space>
+        <Space style={{ marginBottom: 16 }} wrap>
+          {filterableFields.map((key) => {
+            const values = Array.from(
+              new Set(tns.map((t) => t[key]?.value).filter(Boolean))
+            );
+            const label = tns.find((t) => t[key])?.[key]?.label ?? key;
+            return (
+              <Select
+                key={key}
+                value={filters[key] ?? "Все"}
+                style={{ width: 220 }}
+                onChange={(val) => updateFilter(key, val)}
+                options={[
+                  { value: "Все", label: `${label}: Все` },
+                  ...values.map((v) => ({ value: v, label: v })),
+                ]}
+              />
+            );
+          })}
+        </Space>
 
         {error && (
           <Alert type="error" message={error} style={{ marginBottom: 16 }} />
@@ -209,7 +264,7 @@ export default function MainContent() {
             <div style={{ marginTop: 20, textAlign: "center" }}>
               <Pagination
                 current={page}
-                total={tns.length}
+                total={filteredTns.length}
                 pageSize={pageSize}
                 onChange={setPage}
               />
