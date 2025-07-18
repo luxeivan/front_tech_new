@@ -12,6 +12,7 @@ import {
   Space,
   Descriptions,
   Divider,
+  Collapse,            // ← add this
   Modal,
   Input,
   message,
@@ -325,7 +326,21 @@ export default function MainContent() {
               : {}),
           }))}
         />
-        <SoInfo tnId={record.raw.id} docId={record.raw.documentId} />
+
+        {/* Соц‑объекты: лениво подгружаем внутри сворачиваемого блока */}
+        <Collapse
+          bordered={false}
+          destroyInactivePanel
+          size="small"
+          style={{ marginTop: 12 }}
+        >
+          <Collapse.Panel
+            header="Соц объекты"
+            key="so"
+          >
+            <SoInfo tnId={record.raw.id} docId={record.raw.documentId} />
+          </Collapse.Panel>
+        </Collapse>
       </>
     );
   };
