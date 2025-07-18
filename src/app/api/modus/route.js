@@ -80,10 +80,12 @@ export async function POST(req) {
       // сначала создаём сами соц‑объекты
       const soComponents = [];
       for (const so of rawSO) {
-        const soPayload = { data: mapValue(so) };
+        const mappedSo = mapValue(so);
+
+        const soPayload = { data: mappedSo };
         const soId = await strapiReq("POST", SO_ENDPOINT, soPayload, auth);
         console.log("!!!!!!!!!!", soId);
-        soComponents.push({ SocialObjects: { SocialObjects: soId } });
+        soComponents.push({ SocialObjects: soId });
       }
 
       if (soComponents.length) {

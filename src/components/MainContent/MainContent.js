@@ -289,8 +289,6 @@ export default function MainContent() {
 
     return (
       <>
-        <SoInfo tnId={record.raw.id} docId={record.raw.documentId} />
-
         <Descriptions
           bordered
           size="small"
@@ -320,6 +318,7 @@ export default function MainContent() {
             ),
           }))}
         />
+        <SoInfo tnId={record.raw.id} docId={record.raw.documentId} />
       </>
     );
   };
