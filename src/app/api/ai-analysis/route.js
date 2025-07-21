@@ -32,7 +32,6 @@ export async function POST(request) {
               Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
               "Content-Type": "application/json",
               Referer: process.env.NEXTAUTH_URL || "",
-              "X-Title": "МосОблЭнерго AI Аналитика", 
             },
             timeout: 20000,
           }
