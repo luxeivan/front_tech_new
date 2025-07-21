@@ -1,4 +1,3 @@
-// src/stores/incidentsDataStore.js
 import { create } from "zustand";
 
 export const useIncidentsDataStore = create((set) => ({

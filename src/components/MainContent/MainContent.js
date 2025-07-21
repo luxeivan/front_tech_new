@@ -12,7 +12,7 @@ import {
   Space,
   Descriptions,
   Divider,
-  Collapse,            // ← add this
+  Collapse,
   Modal,
   Input,
   message,
@@ -22,21 +22,20 @@ import dayjs from "dayjs";
 import "dayjs/locale/ru";
 import { ReloadOutlined, EditOutlined } from "@ant-design/icons";
 import { useSession } from "next-auth/react";
-
-import { useTnsDataStore } from "@/stores/tnsDataStore";
-
+import {
+  useTnsDataStore,
+  useTnFilters,
+  usePaging,
+} from "@/stores/tnsDataStore";
 dayjs.locale("ru");
-
 const { Title } = Typography;
 
-// --- helper: fetch & show Social Objects full info ----------------------
 const SoInfo = ({ tnId, docId }) => {
-  const [docIds, setDocIds]   = React.useState(null);   // array of linked ids
-  const [details, setDetails] = React.useState({});     // { docId : socialObject }
-  const { data: session }     = useSession();
-  const token                 = session?.user?.jwt;
+  const [docIds, setDocIds] = React.useState(null); // список documentId соц‑объектов для данного ТН (null => ещё не загружено)
+  const [details, setDetails] = React.useState({}); // map: { documentId : объект‑детали | null (loading) | undefined (error) }
+  const { data: session } = useSession();
+  const token = session?.user?.jwt;
 
-  // 1) запрашиваем список documentId соц‑объектов, связанных с ТН
   React.useEffect(() => {
     let cancelled = false;
 
@@ -50,9 +49,7 @@ const SoInfo = ({ tnId, docId }) => {
         const list = Array.isArray(json?.data?.SocialObjects)
           ? json.data.SocialObjects.flatMap((c) =>
               Array.isArray(c.SocialObjects)
-                ? c.SocialObjects
-                    .map((o) => o.documentId)
-                    .filter(Boolean)
+                ? c.SocialObjects.map((o) => o.documentId).filter(Boolean)
                 : []
             )
           : [];
@@ -73,24 +70,24 @@ const SoInfo = ({ tnId, docId }) => {
     })();
   }, [tnId, docId, token]);
 
-  // 2) для каждого documentId вытягиваем детальную инфу (кэшируется в `details`)
+  /* for each docId запрашиваем /soczialnye-obekties?filters[...]…
+     детали пишем в `details`, при ошибке → undefined */
   React.useEffect(() => {
     if (!docIds) return;
     docIds.forEach(async (id) => {
-      if (details[id] !== undefined) return; // уже есть / грузится
+      if (details[id] !== undefined) return;
 
-      // помечаем как «loading»
       setDetails((p) => ({ ...p, [id]: null }));
 
       try {
         const url =
           `${process.env.NEXT_PUBLIC_STRAPI_URL}` +
           `/api/soczialnye-obekties?filters[documentId][$eq]=${id}&populate=*`;
-        const res  = await fetch(url, {
+        const res = await fetch(url, {
           headers: { Authorization: token ? `Bearer ${token}` : undefined },
         });
         const json = await res.json();
-        const so   = json?.data?.[0] ?? undefined; // undefined → не найден
+        const so = json?.data?.[0] ?? undefined;
 
         setDetails((p) => ({ ...p, [id]: so }));
       } catch (e) {
@@ -102,6 +99,7 @@ const SoInfo = ({ tnId, docId }) => {
 
   if (!docIds || docIds.length === 0) return null;
 
+  // ─── UI ───
   return (
     <>
       <Divider orientation="left" style={{ marginTop: 12 }}>
@@ -146,9 +144,9 @@ const SoInfo = ({ tnId, docId }) => {
     </>
   );
 };
-// -------------------------------------------------------------------------
 
 export default function MainContent() {
+  // ──────────────────────── 1. AUTH & STORE ────────────────────────
   const { data: session } = useSession();
   const token = session?.user?.jwt;
   const { tns, loading, error, fetchTns, updateField } = useTnsDataStore();
@@ -162,49 +160,20 @@ export default function MainContent() {
     return () => clearInterval(id);
   }, [token, fetchTns]);
 
-  /* pagination */
-  /* dynamic filters */
-  const filterableFields = useMemo(() => {
-    const set = new Set();
-    tns.forEach((t) => {
-      Object.entries(t).forEach(([k, v]) => {
-        if (v && typeof v === "object" && v.filter === "Да") set.add(k);
-      });
-    });
-    return Array.from(set);
-  }, [tns]);
+  // ──────────────────────── 2. Фильтры / Пагинация через хуки ───────
+  const { filterableFields, filters, setFilterValue, filteredTns } =
+    useTnFilters();
 
-  // filters object: { fieldKey : selectedValue }
-  const [filters, setFilters] = useState({});
+  const {
+    page,
+    setPage,
+    current: currentRows,
+    pageSize,
+  } = usePaging(filteredTns, 10);
 
-  // whenever available filterable fields change – initialise to "Все"
-  useEffect(() => {
-    const initial = {};
-    filterableFields.forEach((k) => (initial[k] = "Все"));
-    setFilters(initial);
-  }, [filterableFields]);
-
-  const updateFilter = (fieldKey, value) =>
-    setFilters((prev) => ({ ...prev, [fieldKey]: value }));
-
-  const [page, setPage] = useState(1);
-  const pageSize = 10;
-  const sliceStart = (page - 1) * pageSize;
-
-  /* filtering of rows according to `filters` */
-  const filteredTns = tns.filter((item) =>
-    filterableFields.every((key) => {
-      const selected = filters[key] ?? "Все";
-      if (selected === "Все") return true;
-      return (item[key]?.value ?? "—") === selected;
-    })
-  );
-
-  const currentRows = filteredTns.slice(sliceStart, sliceStart + pageSize);
-
-  /* inline‑edit modal */
-  const [editing, setEditing] = useState(null); // { tnId, docId, fieldKey, label }
-  const [editValue, setEditValue] = useState("");
+  // ──────────────────────── 3. DATA ⇢ TABLE ROWS ────────────────────
+  const [editing, setEditing] = useState(null); // редактируемое поле { tnId, docId, fieldKey, label }
+  const [editValue, setEditValue] = useState(""); // значение редактируемого поля
 
   const openEdit = (tnId, docId, fieldKey, label, value) => {
     setEditing({ tnId, docId, fieldKey, label });
@@ -216,10 +185,8 @@ export default function MainContent() {
     const { tnId, docId, fieldKey } = editing;
     const newVal = editValue?.trim();
 
-    // 1) сразу обновляем в сторе
     updateField(tnId, fieldKey, newVal);
 
-    // 2) пытаемся сохранить на сервере
     try {
       const res = await fetch(
         `${process.env.NEXT_PUBLIC_STRAPI_URL}/api/tns/${docId}`,
@@ -247,7 +214,6 @@ export default function MainContent() {
     }
   };
 
-  /* map to table rows */
   const dataSource = currentRows.map((item) => ({
     key: item.id,
     raw: item,
@@ -259,6 +225,7 @@ export default function MainContent() {
       : "—",
   }));
 
+  // ──────────────────────── 4. COLUMNS ──────────────────────────────
   const columns = [
     { title: "№ ТН", dataIndex: "number", key: "number" },
     { title: "Диспетчер", dataIndex: "dispatcher", key: "dispatcher" },
@@ -266,7 +233,6 @@ export default function MainContent() {
     { title: "Дата/время", dataIndex: "eventDate", key: "eventDate" },
   ];
 
-  /* карточка раскрытия: перебираем все компоненты с label/value */
   const expandedRowRender = (record) => {
     const items = Object.entries(record.raw)
       .filter(
@@ -302,7 +268,11 @@ export default function MainContent() {
                 {it.value}{" "}
                 {it.canEdit && (
                   <EditOutlined
-                    style={{ marginLeft: 8, cursor: "pointer", color: "#389e0d" }}
+                    style={{
+                      marginLeft: 8,
+                      cursor: "pointer",
+                      color: "#389e0d",
+                    }}
                     onClick={() => {
                       const docId = record.raw.documentId;
                       openEdit(
@@ -317,7 +287,7 @@ export default function MainContent() {
                 )}
               </>
             ),
-            // подсветка всей ячейки, если поле редактируемое
+            // если поле редактируемое, красим label+value #f6ffed
             ...(it.canEdit
               ? {
                   labelStyle: { background: "#f6ffed" },
@@ -327,17 +297,13 @@ export default function MainContent() {
           }))}
         />
 
-        {/* Соц‑объекты: лениво подгружаем внутри сворачиваемого блока */}
         <Collapse
           bordered={false}
           destroyInactivePanel
           size="small"
           style={{ marginTop: 12 }}
         >
-          <Collapse.Panel
-            header="Соц объекты"
-            key="so"
-          >
+          <Collapse.Panel header="Соц объекты" key="so">
             <SoInfo tnId={record.raw.id} docId={record.raw.documentId} />
           </Collapse.Panel>
         </Collapse>
@@ -345,6 +311,7 @@ export default function MainContent() {
     );
   };
 
+  // ──────────────────────── 6. RENDER ───────────────────────────────
   return (
     <ConfigProvider locale={ru_RU}>
       <div style={{ padding: 20 }}>
@@ -376,7 +343,7 @@ export default function MainContent() {
                 key={key}
                 value={filters[key] ?? "Все"}
                 style={{ width: 220 }}
-                onChange={(val) => updateFilter(key, val)}
+                onChange={(val) => setFilterValue(key, val)}
                 options={[
                   { value: "Все", label: `${label}: Все` },
                   ...values.map((v) => ({ value: v, label: v })),
