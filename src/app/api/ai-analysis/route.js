@@ -6,7 +6,11 @@ const COMMON_SYS =
   "Вы — дружелюбный AI-аналитик технологических нарушений в Московской области. " +
   "Анализируй статистику. Не добавляй лишних маркеров.";
 
-const MODELS = ["openai/gpt-3.5-turbo"];
+const MODELS = [
+  "openai/gpt-4o-mini",          // основной бесплатный модельный вариант
+  "anthropic/claude-3-haiku-20240307", // fallback #1
+  "mistralai/mistral-7b-instruct",     // fallback #2
+];
 
 export async function POST(request) {
   try {
