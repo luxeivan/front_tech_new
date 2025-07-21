@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+console.log("🔥 PROD OPENROUTER_API_KEY =", process.env.OPENROUTER_API_KEY);
 import axios from "axios";
 
 const COMMON_SYS =
