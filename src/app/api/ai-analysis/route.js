@@ -49,7 +49,11 @@ export async function POST(request) {
       );
     }
 
-    return NextResponse.json({ text: answer });
+    // return NextResponse.json({ text: answer });
+
+    const response = NextResponse.json({ text: answer });
+    response.headers.set("Access-Control-Allow-Origin", "*");
+    return response;
   } catch (e) {
     console.error("AI-analysis route error", e);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
