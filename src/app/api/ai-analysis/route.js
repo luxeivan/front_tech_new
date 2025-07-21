@@ -6,7 +6,7 @@ const COMMON_SYS =
   "Вы — дружелюбный AI-аналитик технологических нарушений в Московской области. " +
   "Анализируй статистику. Не добавляй лишних маркеров.";
 
-const MODELS = ["gpt-3.5-turbo"];
+const MODELS = ["openai/gpt-3.5-turbo"];
 
 export async function POST(request) {
   try {
@@ -31,6 +31,8 @@ export async function POST(request) {
             headers: {
               Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
               "Content-Type": "application/json",
+              Referer: process.env.NEXTAUTH_URL || "",
+              "X-Title": "МосОблЭнерго AI Аналитика", 
             },
             timeout: 20000,
           }
