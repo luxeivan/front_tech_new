@@ -20,8 +20,16 @@ import {
 import ru_RU from "antd/locale/ru_RU";
 import dayjs from "dayjs";
 import "dayjs/locale/ru";
-import { ReloadOutlined, EditOutlined, InfoCircleOutlined, ApartmentOutlined, UserOutlined, FieldNumberOutlined } from "@ant-design/icons";
+import {
+  ReloadOutlined,
+  EditOutlined,
+  InfoCircleOutlined,
+  ApartmentOutlined,
+  UserOutlined,
+  FieldNumberOutlined,
+} from "@ant-design/icons";
 import { useSession } from "next-auth/react";
+import SendButtons from "../client/mainContent/SendButtons";
 import {
   useTnsDataStore,
   useTnFilters,
@@ -184,15 +192,6 @@ export default function MainContent() {
   const [editing, setEditing] = useState(null); // редактируемое поле { tnId, docId, fieldKey, label }
   const [editValue, setEditValue] = useState(""); // значение редактируемого поля
 
-  // вспомогательный модал‑плейсхолдер для будущих «отправок»
-  const [sendModal, setSendModal] = useState({ open: false, title: "", msg: "" });
-  const showSendModal = (dest) =>
-    setSendModal({
-      open: true,
-      title: dest,
-      msg: `Скоро здесь будет работать отправка в ${dest}`,
-    });
-
   const openEdit = (tnId, docId, fieldKey, label, value) => {
     setEditing({ tnId, docId, fieldKey, label });
     setEditValue(value ?? "");
@@ -236,10 +235,10 @@ export default function MainContent() {
     key: item.id,
     raw: item,
     number: item.F81_010_NUMBER?.value ?? "—",
-    prodDept: item.SCNAME?.value ?? "—",           // Производственное отделение
-    branch:   item.OWN_SCNAME?.value ?? "—",       // Филиал
-    objectN:  item.F81_041_ENERGOOBJECTNAME?.value ?? "—", // Объект
-    dispCenter: item.DISPCENTER_NAME_?.value ?? "—",       // Дисп. центр
+    prodDept: item.SCNAME?.value ?? "—", // Производственное отделение
+    branch: item.OWN_SCNAME?.value ?? "—", // Филиал
+    objectN: item.F81_041_ENERGOOBJECTNAME?.value ?? "—", // Объект
+    dispCenter: item.DISPCENTER_NAME_?.value ?? "—", // Дисп. центр
     status: item.STATUS_NAME?.value ?? "—",
     eventDate: item.F81_060_EVENTDATETIME?.value
       ? dayjs(item.F81_060_EVENTDATETIME.value).format("DD.MM.YYYY HH:mm")
@@ -249,7 +248,11 @@ export default function MainContent() {
   // ──────────────────────── 4. COLUMNS ──────────────────────────────
   const columns = [
     { title: "№ ТН", dataIndex: "number", key: "number" },
-    { title: "Производственное отделение", dataIndex: "prodDept", key: "prodDept" },
+    {
+      title: "Производственное отделение",
+      dataIndex: "prodDept",
+      key: "prodDept",
+    },
     { title: "Филиал", dataIndex: "branch", key: "branch" },
     { title: "Объект", dataIndex: "objectN", key: "objectN" },
     { title: "Дисп. центр", dataIndex: "dispCenter", key: "dispCenter" },
@@ -320,44 +323,32 @@ export default function MainContent() {
     return (
       <>
         {/* кнопки отправки */}
-        <Space wrap style={{ marginBottom: 12 }}>
-          <Button type="primary" onClick={() => showSendModal("МинЭнерго")}>
-            Отправить в&nbsp;МинЭнерго
-          </Button>
-          <Button
-            style={{ background: "#722ED1", color: "#fff" }}
-            onClick={() => showSendModal("МосЭнергоСбыт")}
-          >
-            Отправить в&nbsp;МосЭнергоСбыт
-          </Button>
-          <Button type="dashed" onClick={() => showSendModal("сайт МинЭнерго РФ")}>
-            Отправить на&nbsp;сайт&nbsp;МинЭнерго&nbsp;РФ
-          </Button>
-          <Button
-            style={{ background: "#FA8C16", color: "#fff" }}
-            onClick={() => showSendModal("сайт МосОблЭнерго")}
-          >
-            Отправить на&nbsp;сайт&nbsp;МосОблЭнерго
-          </Button>
-        </Space>
-
-        <Descriptions
-          bordered
-          size="small"
-          column={2}
-          items={items}
+        <SendButtons
+          tn={record.raw}
+          onFieldChange={(patch) => {
+            Object.entries(patch).forEach(([k, v]) =>
+              updateField(record.raw.id, k, v)
+            );
+          }}
         />
+
+        <Descriptions bordered size="small" column={2} items={items} />
 
         <Collapse
           bordered={false}
           destroyInactivePanel
           size="small"
           style={{ marginTop: 12 }}
-        >
-          <Collapse.Panel header="Соц объекты" key="so">
-            <SoInfo tnId={record.raw.id} docId={record.raw.documentId} />
-          </Collapse.Panel>
-        </Collapse>
+          items={[
+            {
+              key: "so",
+              label: "Соц объекты",
+              children: (
+                <SoInfo tnId={record.raw.id} docId={record.raw.documentId} />
+              ),
+            },
+          ]}
+        />
       </>
     );
   };
@@ -464,14 +455,6 @@ export default function MainContent() {
           onChange={(e) => setEditValue(e.target.value)}
           autoFocus
         />
-      </Modal>
-      <Modal
-        open={sendModal.open}
-        title={sendModal.title}
-        footer={null}
-        onCancel={() => setSendModal({ open: false, title: "", msg: "" })}
-      >
-        <p>{sendModal.msg}</p>
       </Modal>
     </ConfigProvider>
   );
