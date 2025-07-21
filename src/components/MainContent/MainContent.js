@@ -30,6 +30,7 @@ import {
 } from "@ant-design/icons";
 import { useSession } from "next-auth/react";
 import SendButtons from "../client/mainContent/SendButtons";
+import AiButton from "../client/mainContent/AiButton";
 import {
   useTnsDataStore,
   useTnFilters,
@@ -382,6 +383,7 @@ export default function MainContent() {
             <Button danger onClick={clearFilters}>
               Сбросить фильтры
             </Button>
+            <AiButton />
           </Space>
         </div>
         <div
