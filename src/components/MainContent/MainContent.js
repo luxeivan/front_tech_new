@@ -218,7 +218,10 @@ export default function MainContent() {
     key: item.id,
     raw: item,
     number: item.F81_010_NUMBER?.value ?? "—",
-    dispatcher: item.CREATE_USER?.value ?? "—",
+    prodDept: item.SCNAME?.value ?? "—",           // Производственное отделение
+    branch:   item.OWN_SCNAME?.value ?? "—",       // Филиал
+    objectN:  item.F81_041_ENERGOOBJECTNAME?.value ?? "—", // Объект
+    dispCenter: item.DISPCENTER_NAME_?.value ?? "—",       // Дисп. центр
     status: item.STATUS_NAME?.value ?? "—",
     eventDate: item.F81_060_EVENTDATETIME?.value
       ? dayjs(item.F81_060_EVENTDATETIME.value).format("DD.MM.YYYY HH:mm")
@@ -228,15 +231,27 @@ export default function MainContent() {
   // ──────────────────────── 4. COLUMNS ──────────────────────────────
   const columns = [
     { title: "№ ТН", dataIndex: "number", key: "number" },
-    { title: "Диспетчер", dataIndex: "dispatcher", key: "dispatcher" },
+    { title: "Производственное отделение", dataIndex: "prodDept", key: "prodDept" },
+    { title: "Филиал", dataIndex: "branch", key: "branch" },
+    { title: "Объект", dataIndex: "objectN", key: "objectN" },
+    { title: "Дисп. центр", dataIndex: "dispCenter", key: "dispCenter" },
     { title: "Статус", dataIndex: "status", key: "status" },
     { title: "Дата/время", dataIndex: "eventDate", key: "eventDate" },
   ];
 
+  const clearFilters = () => {
+    filterableFields.forEach((k) => setFilterValue(k, "Все"));
+    setPage(1);
+  };
+
   const expandedRowRender = (record) => {
     const items = Object.entries(record.raw)
       .filter(
-        ([, v]) =>
+        ([key, v]) =>
+          // пропускаем “тех‑поля”, которые не должны отображаться
+          !["OBJECTNAMEKEY", "SWITCHNAMEKEY", "PVS_RP116_10BR_F20"].includes(
+            key
+          ) &&
           v &&
           typeof v === "object" &&
           "label" in v &&
@@ -315,24 +330,41 @@ export default function MainContent() {
   return (
     <ConfigProvider locale={ru_RU}>
       <div style={{ padding: 20 }}>
-        <Space
+        <div
           style={{
             marginBottom: 16,
-            width: "100%",
+            display: "flex",
             justifyContent: "space-between",
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: 8,
           }}
         >
           <Title level={2} style={{ margin: 0 }}>
-            Технологические нарушения
+            Технологические&nbsp;нарушения
           </Title>
-          <Button
-            icon={<ReloadOutlined />}
-            onClick={() => token && fetchTns(token)}
-          >
-            Обновить
-          </Button>
-        </Space>
-        <Space style={{ marginBottom: 16 }} wrap>
+
+          <Space>
+            <Button
+              type="primary"
+              icon={<ReloadOutlined />}
+              onClick={() => token && fetchTns(token)}
+            >
+              Обновить
+            </Button>
+            <Button danger onClick={clearFilters}>
+              Сбросить фильтры
+            </Button>
+          </Space>
+        </div>
+        <div
+          style={{
+            marginBottom: 16,
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 8,
+          }}
+        >
           {filterableFields.map((key) => {
             const values = Array.from(
               new Set(tns.map((t) => t[key]?.value).filter(Boolean))
@@ -351,7 +383,7 @@ export default function MainContent() {
               />
             );
           })}
-        </Space>
+        </div>
 
         {error && (
           <Alert type="error" message={error} style={{ marginBottom: 16 }} />
