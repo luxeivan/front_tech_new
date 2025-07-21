@@ -20,7 +20,7 @@ import {
 import ru_RU from "antd/locale/ru_RU";
 import dayjs from "dayjs";
 import "dayjs/locale/ru";
-import { ReloadOutlined, EditOutlined } from "@ant-design/icons";
+import { ReloadOutlined, EditOutlined, InfoCircleOutlined, ApartmentOutlined, UserOutlined, FieldNumberOutlined } from "@ant-design/icons";
 import { useSession } from "next-auth/react";
 import {
   useTnsDataStore,
@@ -29,6 +29,15 @@ import {
 } from "@/stores/tnsDataStore";
 dayjs.locale("ru");
 const { Title } = Typography;
+
+// небольшая карта "поле → иконка", чтобы визуально разбавить серую таблицу
+const iconMap = {
+  CREATE_USER: <UserOutlined style={{ marginRight: 4 }} />,
+  F81_010_NUMBER: <FieldNumberOutlined style={{ marginRight: 4 }} />,
+  SCNAME: <ApartmentOutlined style={{ marginRight: 4 }} />,
+  OWN_SCNAME: <ApartmentOutlined style={{ marginRight: 4 }} />,
+  STATUS_NAME: <InfoCircleOutlined style={{ marginRight: 4 }} />,
+};
 
 const SoInfo = ({ tnId, docId }) => {
   const [docIds, setDocIds] = React.useState(null); // список documentId соц‑объектов для данного ТН (null => ещё не загружено)
@@ -175,6 +184,15 @@ export default function MainContent() {
   const [editing, setEditing] = useState(null); // редактируемое поле { tnId, docId, fieldKey, label }
   const [editValue, setEditValue] = useState(""); // значение редактируемого поля
 
+  // вспомогательный модал‑плейсхолдер для будущих «отправок»
+  const [sendModal, setSendModal] = useState({ open: false, title: "", msg: "" });
+  const showSendModal = (dest) =>
+    setSendModal({
+      open: true,
+      title: dest,
+      msg: `Скоро здесь будет работать отправка в ${dest}`,
+    });
+
   const openEdit = (tnId, docId, fieldKey, label, value) => {
     setEditing({ tnId, docId, fieldKey, label });
     setEditValue(value ?? "");
@@ -259,57 +277,75 @@ export default function MainContent() {
           v.value !== null &&
           v.value !== ""
       )
-      .map(([key, v]) => ({
-        key,
-        label: v.label,
-        value:
-          typeof v.value === "string" || typeof v.value === "number"
-            ? String(v.value)
-            : JSON.stringify(v.value),
-        canEdit: v.edit === "Да",
-      }));
+      .map(([key, v], idx) => {
+        const zebraBg = idx % 2 ? "#fafafa" : undefined; // чёт/нечёт
+        const canEdit = v.edit === "Да";
+
+        return {
+          key,
+          label: (
+            <>
+              {iconMap[key]}
+              {v.label}
+            </>
+          ),
+          children: (
+            <>
+              {typeof v.value === "string" || typeof v.value === "number"
+                ? String(v.value)
+                : JSON.stringify(v.value)}
+              {canEdit && (
+                <EditOutlined
+                  style={{ marginLeft: 8, cursor: "pointer", color: "#389e0d" }}
+                  onClick={() => {
+                    const docId = record.raw.documentId;
+                    openEdit(record.raw.id, docId, key, v.label, v.value);
+                  }}
+                />
+              )}
+            </>
+          ),
+          // визуальный стиль: зебра + зелёная заливка для редактируемых
+          labelStyle: {
+            background: canEdit ? "#f6ffed" : zebraBg,
+            ...(!canEdit && zebraBg ? { transition: "background 0.3s" } : {}),
+          },
+          contentStyle: {
+            background: canEdit ? "#f6ffed" : zebraBg,
+            ...(!canEdit && zebraBg ? { transition: "background 0.3s" } : {}),
+          },
+        };
+      });
 
     return (
       <>
+        {/* кнопки отправки */}
+        <Space wrap style={{ marginBottom: 12 }}>
+          <Button type="primary" onClick={() => showSendModal("МинЭнерго")}>
+            Отправить в&nbsp;МинЭнерго
+          </Button>
+          <Button
+            style={{ background: "#722ED1", color: "#fff" }}
+            onClick={() => showSendModal("МосЭнергоСбыт")}
+          >
+            Отправить в&nbsp;МосЭнергоСбыт
+          </Button>
+          <Button type="dashed" onClick={() => showSendModal("сайт МинЭнерго РФ")}>
+            Отправить на&nbsp;сайт&nbsp;МинЭнерго&nbsp;РФ
+          </Button>
+          <Button
+            style={{ background: "#FA8C16", color: "#fff" }}
+            onClick={() => showSendModal("сайт МосОблЭнерго")}
+          >
+            Отправить на&nbsp;сайт&nbsp;МосОблЭнерго
+          </Button>
+        </Space>
+
         <Descriptions
           bordered
           size="small"
           column={2}
-          items={items.map((it) => ({
-            key: it.key,
-            label: it.label,
-            children: (
-              <>
-                {it.value}{" "}
-                {it.canEdit && (
-                  <EditOutlined
-                    style={{
-                      marginLeft: 8,
-                      cursor: "pointer",
-                      color: "#389e0d",
-                    }}
-                    onClick={() => {
-                      const docId = record.raw.documentId;
-                      openEdit(
-                        record.raw.id,
-                        docId,
-                        it.key,
-                        it.label,
-                        it.value
-                      );
-                    }}
-                  />
-                )}
-              </>
-            ),
-            // если поле редактируемое, красим label+value #f6ffed
-            ...(it.canEdit
-              ? {
-                  labelStyle: { background: "#f6ffed" },
-                  contentStyle: { background: "#f6ffed" },
-                }
-              : {}),
-          }))}
+          items={items}
         />
 
         <Collapse
@@ -428,6 +464,14 @@ export default function MainContent() {
           onChange={(e) => setEditValue(e.target.value)}
           autoFocus
         />
+      </Modal>
+      <Modal
+        open={sendModal.open}
+        title={sendModal.title}
+        footer={null}
+        onCancel={() => setSendModal({ open: false, title: "", msg: "" })}
+      >
+        <p>{sendModal.msg}</p>
       </Modal>
     </ConfigProvider>
   );
