@@ -6,6 +6,14 @@ import { Button, Modal, Space, Descriptions, Input, message } from "antd";
 import { EditOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 
+const CUSTOM_LABELS = {
+  need_brigade_count: 'Потребность: Бригады',
+  need_person_count:  'Потребность: Человек',
+  need_equipment_count: 'Потребность: Техника',
+  need_reserve_power_source_count: 'Потребность: Резервные источники',
+};
+const NEW_FIELDS = Object.keys(CUSTOM_LABELS);
+
 const ME_FIELDS = [
   "VIOLATION_TYPE",
   "STATUS_NAME",
@@ -24,7 +32,16 @@ const ME_FIELDS = [
   "EMPLOYEECOUNT",
   "SPECIALTECHNIQUECOUNT",
   "PES_COUNT",
+  "need_brigade_count",
+  "need_person_count",
+  "need_equipment_count",
+  "need_reserve_power_source_count",
 ];
+
+// === ПОЛЯ ДЛЯ ДРУГИХ МОДАЛОК ===
+const MOSENERGOSBYT_FIELDS = [];       // Поля для отправки в МосЭнергоСбыт
+const SITE_MINENERGO_FIELDS = [];      // Поля для отправки на сайт МинЭнерго РФ
+const SITE_MOSOBLENERGO_FIELDS = [];   // Поля для отправки на сайт МосОблЭнерго
 
 export default function SendButtons({ tn, updateField }) {
   const { data: session } = useSession();
@@ -37,24 +54,30 @@ export default function SendButtons({ tn, updateField }) {
   // inline‑edit modal state inside the ME dialog
   const [editing, setEditing] = useState(null); // { field, value }
 
-  // открываем форму МинЭнерго, кладём снапшот полей
+  // Открывает форму для выбранного направления отправки данных
+  // Сейчас реализовано только для МинЭнерго; будущие модалки будут открываться аналогичным образом
   const showME = () => {
     // формируем черновик‑значения (только value, без метаданных)
     setDraft(
-      Object.fromEntries(
-        ME_FIELDS.map((k) => [k, tn[k]?.value ?? "—"])
-      )
+      Object.fromEntries(ME_FIELDS.map((k) => [k, tn[k]?.value ?? "—"]))
     );
+
+    console.log("NEW FIELD DEBUG:", {
+      need_brigade: tn.need_brigade_count,
+      need_person: tn.need_person_count,
+      need_equipment: tn.need_equipment_count,
+      need_reserve: tn.need_reserve_power_source_count,
+    });
+    
     setOpenME(true);
   };
 
   const saveME = () => {
-    // ← тут вызов API / Saga / fetch — что угодно
-    console.log("► send to МинЭнерго:", draft);
+    const payload = { ...draft };
+    console.log("Сформированный JSON для МинЭнерго:", JSON.stringify(payload, null, 2));
     message.success("Данные отправлены (заглушка)");
     setOpenME(false);
   };
-
 
   const stub = (dest) =>
     Modal.info({
@@ -104,14 +127,26 @@ export default function SendButtons({ tn, updateField }) {
           {ME_FIELDS.map((k) => (
             <Descriptions.Item
               key={k}
-              label={tn[k]?.label ?? k}
+              label={
+                tn[k]?.label
+                  ?? CUSTOM_LABELS[k]
+                  ?? k
+              }
               span={1}
-              contentStyle={{ background: tn[k]?.edit === "Да" && "#f6ffed" }}
+              contentStyle={{
+                background: (
+                  (tn[k]?.edit === 'Да')
+                  || NEW_FIELDS.includes(k)
+                ) ? '#f6ffed' : undefined
+              }}
             >
-              {draft[k] ?? "—"}{" "}
-              {tn[k]?.edit === "Да" && (
+              {draft[k] ?? '—'}{' '}
+              {(
+                tn[k]?.edit === 'Да'
+                || NEW_FIELDS.includes(k)
+              ) && (
                 <EditOutlined
-                  style={{ marginLeft: 8, cursor: "pointer" }}
+                  style={{ marginLeft: 8, cursor: 'pointer' }}
                   onClick={() => setEditing({ field: k, value: draft[k] })}
                 />
               )}
@@ -121,7 +156,7 @@ export default function SendButtons({ tn, updateField }) {
         {/* inline editor for one field */}
         <Modal
           open={!!editing}
-          title={editing ? (tn[editing.field]?.label ?? editing.field) : ""}
+          title={editing ? tn[editing.field]?.label ?? editing.field : ""}
           onOk={async () => {
             if (!editing) return;
             const newVal = editing.value?.trim();
