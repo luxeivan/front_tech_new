@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import {
   Table,
   Spin,
@@ -174,9 +174,26 @@ export default function MainContent() {
 
   useEffect(() => {
     if (!token) return;
-    const id = setInterval(() => fetchTns(token), 120_000);
+    const id = setInterval(() => fetchTns(token), 60_000);
     return () => clearInterval(id);
   }, [token, fetchTns]);
+
+  // play notification sound when new TN appears
+  const prevTnIdsRef = useRef([]);
+  useEffect(() => {
+    // skip on initial load
+    if (prevTnIdsRef.current.length > 0) {
+      const currentIds = tns.map((t) => t.id);
+      const newIds = currentIds.filter((id) => !prevTnIdsRef.current.includes(id));
+      if (newIds.length > 0) {
+        const audio = new Audio('/sounds/sound.mp3');
+        // play audio, ignore any playback errors
+        audio.play().catch(() => {});
+      }
+    }
+    // update reference for next comparison
+    prevTnIdsRef.current = tns.map((t) => t.id);
+  }, [tns]);
 
   // ──────────────────────── 2. Фильтры / Пагинация через хуки ───────
   const { filterableFields, filters, setFilterValue, filteredTns } =
