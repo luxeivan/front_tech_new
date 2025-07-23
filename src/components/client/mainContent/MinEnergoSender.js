@@ -97,17 +97,51 @@ export default function MinEnergoSender({ tn, updateField, open, onClose }) {
 
   // Формируем JSON и выводим в консоль
   const handleSend = () => {
-    const payload = {
-      time_create: formatDateTime(draft.F81_060_EVENTDATETIME),
-      incident_id:
-        draft.VIOLATION_GUID_STR?.value ||
-        tn?.VIOLATION_GUID_STR?.value ||
-        draft.VIOLATION_GUID_STR ||
-        tn?.VIOLATION_GUID_STR,
-    };
-    if ("VIOLATION_TYPE" in draft && draft.VIOLATION_TYPE) {
-      payload.type = TYPE_MAP[draft.VIOLATION_TYPE] ?? draft.VIOLATION_TYPE;
+    // time_create
+    const time_create = formatDateTime(draft.F81_060_EVENTDATETIME) || null;
+    // incident_id
+    const incident_id =
+      draft.VIOLATION_GUID_STR?.value ??
+      tn?.VIOLATION_GUID_STR?.value ??
+      draft.VIOLATION_GUID_STR ??
+      tn?.VIOLATION_GUID_STR ??
+      null;
+    // type
+    let type = null;
+    if ("VIOLATION_TYPE" in draft) {
+      if (draft.VIOLATION_TYPE && draft.VIOLATION_TYPE !== "—") {
+        type = TYPE_MAP[draft.VIOLATION_TYPE] ?? draft.VIOLATION_TYPE;
+      }
     }
+    // status (маппинг через STATUS_NAME_MAP)
+    let status = null;
+    let statusValue = draft.STATUS_NAME ?? tn?.STATUS_NAME ?? null;
+    if (typeof statusValue === "object" && statusValue?.value) {
+      statusValue = statusValue.value;
+    }
+    if (statusValue && statusValue !== "—") {
+      // Приведение к правильному регистру: первая буква заглавная, остальные строчные
+      const normalizedStatus =
+        statusValue.charAt(0).toUpperCase() + statusValue.slice(1).toLowerCase();
+      status = STATUS_NAME_MAP[normalizedStatus] ?? null;
+    }
+    // plan_date_close
+    let plan_date_close = null;
+    const planDate = draft.F81_070_RESTOR_SUPPLAYDATETIME ?? tn?.F81_070_RESTOR_SUPPLAYDATETIME;
+    if (planDate && planDate !== "—") {
+      const d = new Date(planDate);
+      if (!isNaN(d.getTime())) {
+        const pad = (num) => String(num).padStart(2, "0");
+        plan_date_close = d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+      }
+    }
+    const payload = {
+      time_create,
+      incident_id,
+      type,
+      status,
+      plan_date_close,
+    };
     console.log(
       "Сформированный JSON для МинЭнерго:",
       JSON.stringify(payload, null, 2)
