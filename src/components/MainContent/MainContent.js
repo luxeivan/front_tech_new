@@ -12,10 +12,10 @@ import {
   Space,
   Descriptions,
   Divider,
-  Collapse,
   Modal,
   Input,
   message,
+  Tabs,
 } from "antd";
 import ru_RU from "antd/locale/ru_RU";
 import dayjs from "dayjs";
@@ -39,7 +39,6 @@ import {
 dayjs.locale("ru");
 const { Title } = Typography;
 
-// небольшая карта "поле → иконка", чтобы визуально разбавить серую таблицу
 const iconMap = {
   CREATE_USER: <UserOutlined style={{ marginRight: 4 }} />,
   F81_010_NUMBER: <FieldNumberOutlined style={{ marginRight: 4 }} />,
@@ -49,8 +48,8 @@ const iconMap = {
 };
 
 const SoInfo = ({ tnId, docId }) => {
-  const [docIds, setDocIds] = React.useState(null); // список documentId соц‑объектов для данного ТН (null => ещё не загружено)
-  const [details, setDetails] = React.useState({}); // map: { documentId : объект‑детали | null (loading) | undefined (error) }
+  const [docIds, setDocIds] = React.useState(null);
+  const [details, setDetails] = React.useState({});
   const { data: session } = useSession();
   const token = session?.user?.jwt;
 
@@ -88,8 +87,6 @@ const SoInfo = ({ tnId, docId }) => {
     })();
   }, [tnId, docId, token]);
 
-  /* for each docId запрашиваем /soczialnye-obekties?filters[...]…
-     детали пишем в `details`, при ошибке → undefined */
   React.useEffect(() => {
     if (!docIds) return;
     docIds.forEach(async (id) => {
@@ -163,6 +160,110 @@ const SoInfo = ({ tnId, docId }) => {
   );
 };
 
+function groupFields(record) {
+  const fields = Object.entries(record).filter(
+    ([key, v]) =>
+      // пропускаем “тех‑поля”, которые не должны отображаться
+      !["OBJECTNAMEKEY", "SWITCHNAMEKEY", "PVS_RP116_10BR_F20"].includes(key) &&
+      v &&
+      typeof v === "object" &&
+      "label" in v &&
+      v.value !== undefined &&
+      v.value !== null &&
+      v.value !== ""
+  );
+
+  const mainKeys = new Set([
+    "CREATE_USER",
+    "fio_response_phone",
+    "description",
+    "F81_010_NUMBER",
+    "VIOLATION_TYPE",
+    "STATUS_NAME",
+    "VIOLATION_GUID_STR",
+    "SCNAME",
+    "OWN_SCNAME",
+    "DISPCENTER_NAME_",
+  ]);
+  const dateStatusKeys = new Set([
+    "F81_060_EVENTDATETIME",
+    "F81_070_RESTOR_SUPPLAYDATETIME",
+    "CREATE_DATETIME",
+    "F81_290_RECOVERYDATETIME",
+  ]);
+
+  // For "Отключения и потребители": keys containing "ALL" or "COUNT"
+  // For "Потребности и ресурсы": explicit keys plus those containing need_ or _count
+
+  const outageConsumerKeys = [];
+  const resourceKeys = [];
+
+  // Explicit keys for resources as per instruction
+  const explicitResourceKeys = new Set([
+    "BRIGADECOUNT",
+    "EMPLOYEECOUNT",
+    "SPECIALTECHNIQUECOUNT",
+    "PES_COUNT",
+    "need_brigade_count",
+    "need_person_count",
+    "need_equipment_count",
+    "need_reserve_power_source_count",
+  ]);
+
+  // Prepare groups
+  const main = [];
+  const dateStatus = [];
+  const outageConsumer = [];
+  const resources = [];
+  const others = [];
+
+  fields.forEach(([key, v]) => {
+    const val = v.value;
+    const canEdit = v.edit === "Да";
+
+    if (mainKeys.has(key)) {
+      main.push([key, v]);
+    } else if (dateStatusKeys.has(key)) {
+      dateStatus.push([key, v]);
+    } else if (key.includes("ALL") || key.includes("COUNT")) {
+      // Check if explicit resource key or resource-like key
+      if (
+        explicitResourceKeys.has(key) ||
+        key.toLowerCase().includes("need_") ||
+        key.toLowerCase().includes("_count")
+      ) {
+        resources.push([key, v]);
+      } else {
+        outageConsumer.push([key, v]);
+      }
+    } else if (
+      explicitResourceKeys.has(key) ||
+      key.toLowerCase().includes("need_") ||
+      key.toLowerCase().includes("_count")
+    ) {
+      resources.push([key, v]);
+    } else {
+      others.push([key, v]);
+    }
+  });
+
+  // Sort each group alphabetically by key
+  const sortByKey = (arr) => arr.sort((a, b) => a[0].localeCompare(b[0]));
+  sortByKey(main);
+  sortByKey(dateStatus);
+  sortByKey(outageConsumer);
+  sortByKey(resources);
+  sortByKey(others);
+
+  return {
+    main,
+    dateStatus,
+    outageConsumer,
+    resources,
+    others,
+  };
+}
+
 export default function MainContent() {
   // ──────────────────────── 1. AUTH & STORE ────────────────────────
   const { data: session } = useSession();
@@ -184,9 +285,11 @@ export default function MainContent() {
     // skip on initial load
     if (prevTnIdsRef.current.length > 0) {
       const currentIds = tns.map((t) => t.id);
-      const newIds = currentIds.filter((id) => !prevTnIdsRef.current.includes(id));
+      const newIds = currentIds.filter(
+        (id) => !prevTnIdsRef.current.includes(id)
+      );
       if (newIds.length > 0) {
-        const audio = new Audio('/sounds/sound.mp3');
+        const audio = new Audio("/sounds/sound.mp3");
         // play audio, ignore any playback errors
         audio.play().catch(() => {});
       }
@@ -284,21 +387,12 @@ export default function MainContent() {
   };
 
   const expandedRowRender = (record) => {
-    const items = Object.entries(record.raw)
-      .filter(
-        ([key, v]) =>
-          // пропускаем “тех‑поля”, которые не должны отображаться
-          !["OBJECTNAMEKEY", "SWITCHNAMEKEY", "PVS_RP116_10BR_F20"].includes(
-            key
-          ) &&
-          v &&
-          typeof v === "object" &&
-          "label" in v &&
-          v.value !== undefined &&
-          v.value !== null &&
-          v.value !== ""
-      )
-      .map(([key, v], idx) => {
+    const { main, dateStatus, outageConsumer, resources, others } = groupFields(
+      record.raw
+    );
+
+    const renderDescriptions = (fields) =>
+      fields.map(([key, v], idx) => {
         const zebraBg = idx % 2 ? "#fafafa" : undefined; // чёт/нечёт
         const canEdit = v.edit === "Да";
 
@@ -338,34 +432,128 @@ export default function MainContent() {
         };
       });
 
+    // Prepare main tab header with key fields in a Descriptions
+    const mainHeaderItems = main.filter(([key]) =>
+      [
+        "F81_010_NUMBER",
+        "VIOLATION_TYPE",
+        "STATUS_NAME",
+        "VIOLATION_GUID_STR",
+        "SCNAME",
+        "OWN_SCNAME",
+        "DISPCENTER_NAME_",
+      ].includes(key)
+    );
+
+    // Render Descriptions for each tab
+    const tabsItems = [
+      {
+        key: "main",
+        label: "Основное",
+        children: (
+          <Descriptions
+            bordered
+            size="small"
+            column={2}
+            items={renderDescriptions(main)}
+            style={{ marginBottom: 12 }}
+          />
+        ),
+      },
+      {
+        key: "dateStatus",
+        label: "Даты и статусы",
+        children: (
+          <Descriptions
+            bordered
+            size="small"
+            column={2}
+            items={renderDescriptions(dateStatus)}
+            style={{ marginBottom: 12 }}
+          />
+        ),
+      },
+      {
+        key: "outageConsumer",
+        label: "Отключения и потребители",
+        children: (
+          <Descriptions
+            bordered
+            size="small"
+            column={2}
+            items={renderDescriptions(outageConsumer)}
+            style={{ marginBottom: 12 }}
+          />
+        ),
+      },
+      {
+        key: "resources",
+        label: "Потребности и ресурсы",
+        children: (
+          <Descriptions
+            bordered
+            size="small"
+            column={2}
+            items={renderDescriptions(resources)}
+            style={{ marginBottom: 12 }}
+          />
+        ),
+      },
+      {
+        key: "so",
+        label: "Социальные объекты",
+        children: <SoInfo tnId={record.raw.id} docId={record.raw.documentId} />,
+      },
+      {
+        key: "others",
+        label: "Прочее",
+        children: (
+          <Descriptions
+            bordered
+            size="small"
+            column={2}
+            items={renderDescriptions(others)}
+            style={{ marginBottom: 12 }}
+          />
+        ),
+      },
+    ];
+
     return (
       <>
         {/* кнопки отправки */}
-        <SendButtons
-          tn={record.raw}
-          onFieldChange={(patch) => {
-            Object.entries(patch).forEach(([k, v]) =>
-              updateField(record.raw.id, k, v)
-            );
+        <div
+          style={{
+            background: "#fff",
+            borderRadius: 10,
+            boxShadow: "0 2px 16px rgba(0,0,0,0.08)",
+            padding: 16,
+            marginBottom: 20,
+            border: "1px solid #f0f0f0",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "flex-start",
+            gap: 16,
           }}
-        />
+        >
+          <div style={{ fontWeight: 500, marginRight: 16 }}>
+            Отправка данных:
+          </div>
+          <SendButtons
+            tn={record.raw}
+            onFieldChange={(patch) => {
+              Object.entries(patch).forEach(([k, v]) =>
+                updateField(record.raw.id, k, v)
+              );
+            }}
+          />
+        </div>
 
-        <Descriptions bordered size="small" column={2} items={items} />
-
-        <Collapse
-          bordered={false}
-          destroyInactivePanel
+        <Tabs
           size="small"
+          items={tabsItems}
+          destroyInactiveTabPane
           style={{ marginTop: 12 }}
-          items={[
-            {
-              key: "so",
-              label: "Соц объекты",
-              children: (
-                <SoInfo tnId={record.raw.id} docId={record.raw.documentId} />
-              ),
-            },
-          ]}
         />
       </>
     );

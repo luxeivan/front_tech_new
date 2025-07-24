@@ -97,6 +97,8 @@ const ME_FIELDS = [
   "F81_070_RESTOR_SUPPLAYDATETIME",
   "POPULATION_COUNT",
   "CREATE_USER",
+  "fio_response_phone",
+  "description",
   "DISTRICT",
   "district_id",
   "LINE110_ALL",
@@ -187,7 +189,10 @@ export default function MinEnergoSender({ tn, updateField, open, onClose }) {
       plan_date_close: toDate(draft.F81_070_RESTOR_SUPPLAYDATETIME),
       count_people: draft.POPULATION_COUNT !== "—" ? draft.POPULATION_COUNT : null,
       fio_response_work: draft.CREATE_USER !== "—" ? draft.CREATE_USER : null,
+      fio_response_phone: draft.fio_response_phone !== "—" ? draft.fio_response_phone : null,
+      description: draft.description !== "—" ? draft.description : null,
       district_id: DISTRICT_MAP[draft.DISTRICT] || null,
+      resources: [5]
     };
 
     console.log(
