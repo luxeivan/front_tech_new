@@ -1,7 +1,7 @@
 "use client";
 import React, { useEffect, useState, useMemo } from "react";
 import { Suspense } from "react";
-import { YMaps, Map } from "@pbe/react-yandex-maps";
+import { YMaps, Map, Placemark } from "@pbe/react-yandex-maps";
 import { Card, Row, Col, Spin, Table, Button } from "antd";
 import {
   ThunderboltOutlined,
@@ -44,7 +44,7 @@ const MetricCard = ({ icon, title, value, color, filterField, onClick }) => (
       padding: "0 0 0 0",
       cursor: filterField ? "pointer" : "default",
     }}
-    bodyStyle={{ padding: "16px 22px" }}
+    styles={{ body: { padding: "16px 22px" } }}
     hoverable={!!filterField}
     onClick={() => {
       if (filterField) {
@@ -135,7 +135,7 @@ const MainMetricCard = ({ value, onClick }) => {
         cursor: "pointer",
       }}
       hoverable
-      bodyStyle={{ padding: "16px 20px" }}
+      styles={{ body: { padding: "16px 20px" } }}
       onClick={() => {
         console.log("[DEBUG] MainMetricCard clicked filter: none");
         onClick(null);
@@ -293,13 +293,7 @@ function Dashboard() {
     });
   }, [tns, filterField, minValue]);
 
-  if (loading || !tns) {
-    return (
-      <div style={{ display: "flex", justifyContent: "center", margin: 40 }}>
-        <Spin size="large" />
-      </div>
-    );
-  }
+  // Всегда рендерим хуки одинаково, не делаем ранний return
 
   // Массив для единого рендера: [{icon, title, value, color, filterField}]
   const metrics = [
@@ -497,6 +491,66 @@ function Dashboard() {
   const outages = tns.length;
   const currentDateTime = dayjs().format("DD.MM.YYYY HH:mm");
 
+  // --- Состояние для координат инцидентов ---
+  const [tnCoords, setTnCoords] = useState([]);
+
+  // --- useEffect для загрузки координат по FIAS ---
+  useEffect(() => {
+    if (!tns || tns.length === 0) {
+      setTnCoords([]);
+      return;
+    }
+    // Собираем уникальные FIAS из tns
+    const fiasMap = {};
+    tns.forEach((item) => {
+      const fias = item.FIAS?.value || item.FIAS;
+      if (fias && !fiasMap[fias]) {
+        fiasMap[fias] = item;
+      }
+    });
+    const uniqueFias = Object.keys(fiasMap);
+    if (uniqueFias.length === 0) {
+      setTnCoords([]);
+      return;
+    }
+    let cancelled = false;
+    // Для каждого уникального FIAS делаем запрос к /api/dadata?query=<FIAS>&mode=address
+    (async () => {
+      const coordsArr = [];
+      for (const fias of uniqueFias) {
+        try {
+          // --- Здесь происходит запрос к dadata API ---
+          const resp = await fetch(`/api/dadata?query=${encodeURIComponent(fias)}&mode=address`);
+          if (!resp.ok) continue;
+          const data = await resp.json();
+          // Проверяем, что есть координаты
+          const lat = data?.location?.lat || data?.lat;
+          const lon = data?.location?.lon || data?.lon;
+          if (lat && lon) {
+            coordsArr.push({
+              id: fias,
+              coords: [parseFloat(lat), parseFloat(lon)],
+              label:
+                fiasMap[fias]?.NAME?.value ||
+                fiasMap[fias]?.NAME ||
+                fiasMap[fias]?.DISTRICT?.value ||
+                fiasMap[fias]?.DISTRICT ||
+                fias,
+            });
+          }
+        } catch (err) {
+          // ignore
+        }
+      }
+      if (!cancelled) {
+        setTnCoords(coordsArr);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tns]);
+
   // Табличные колонки для отображения filteredTns (пример)
   const columns = [
     {
@@ -531,6 +585,12 @@ function Dashboard() {
         maxWidth: "100vw",
       }}
     >
+      {loading || !tns ? (
+        <div style={{ display: "flex", justifyContent: "center", margin: 40 }}>
+          <Spin size="large" />
+        </div>
+      ) : (
+        <>
       <h2
         style={{
           textAlign: "center",
@@ -634,7 +694,21 @@ function Dashboard() {
               yandexMapDisablePoiInteractivity: true,
             }}
             modules={["control.ZoomControl"]}
-          />
+          >
+            {/* --- Здесь отображаем Placemark для каждой tnCoords с popup/label --- */}
+            {tnCoords.map((item) =>
+              item.coords ? (
+                <Placemark
+                  key={item.id}
+                  geometry={item.coords}
+                  properties={{
+                    balloonContent: item.label,
+                    hintContent: item.label,
+                  }}
+                />
+              ) : null
+            )}
+          </Map>
         </YMaps>
       </div>
 
@@ -682,6 +756,8 @@ function Dashboard() {
           ))}
         </Row>
       </Card>
+      </>
+      )}
     </div>
   );
 }
