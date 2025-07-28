@@ -243,10 +243,16 @@ function Dashboard() {
   // Функция для обновления параметров фильтра в URL
   const updateFilter = (field) => {
     if (!field) {
-      // Сброс фильтра
-      router.push(window.location.pathname);
+      // Сброс фильтра: переход на главную страницу со всеми ТН
+      router.push("/");
       setFilterField(null);
       setMinValue(null);
+      return;
+    }
+    if (field === "DISTRICT") {
+      router.push("/?filter=DISTRICT&min=1");
+      setFilterField("DISTRICT");
+      setMinValue(1);
       return;
     }
     const min = 1;
@@ -259,16 +265,24 @@ function Dashboard() {
   const filteredTns = useMemo(() => {
     if (!filterField) return tns;
 
-    console.log("[DEBUG]", filterField, "all values:", tns.map((t) => t[filterField]?.value));
-
     if (filterField === "DISTRICT") {
-      // Фильтрация по населенным пунктам - показываем только те, у которых есть непустое значение DISTRICT
-      return tns.filter((item) => Boolean(item.DISTRICT?.value));
+      // Фильтруем только те ТН, где DISTRICT — не пустая строка и не "—"
+      const filtered = tns.filter((item) => {
+        // Может быть как строка, так и объект { value }
+        const val =
+          typeof item.DISTRICT === "string"
+            ? item.DISTRICT
+            : (item.DISTRICT && typeof item.DISTRICT.value === "string" ? item.DISTRICT.value : "");
+        return !!val && typeof val === "string" && val.trim() !== "" && val.trim() !== "—";
+      });
+      // Дебаг: выводим id найденных ТН
+      console.log(
+        "[ФИЛЬТР PATCHED] DISTRICT not empty — documentIds:",
+        filtered.map((t) => t.documentId).filter(Boolean)
+      );
+      return filtered;
     }
-
-    // Для всех остальных фильтров фильтруем по числовому значению >= minValue
     if (minValue === null || isNaN(minValue)) return tns;
-
     return tns.filter((item) => {
       const val = item[filterField]?.value;
       if (val === undefined || val === null) return false;
@@ -586,7 +600,11 @@ function Dashboard() {
               justifyContent: "center",
             }}
           >
-            <MetricCard {...m} filterField={m.filterField} onClick={updateFilter} />
+            <MetricCard
+              {...m}
+              filterField={m.filterField}
+              onClick={updateFilter}
+            />
           </Col>
         ))}
       </Row>
@@ -656,7 +674,6 @@ function Dashboard() {
           ))}
         </Row>
       </Card>
-
     </div>
   );
 }

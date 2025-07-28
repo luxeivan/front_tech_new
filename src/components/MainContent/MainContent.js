@@ -273,8 +273,21 @@ export default function MainContent() {
   const { tns, loading, error, fetchTns, updateField } = useTnsDataStore();
   // --- фильтрация по фильтру из searchParams ---
   // --- фильтрация по фильтру из searchParams ---
-  let filteredTnsByField = tns;
-  if (filterField) {
+let filteredTnsByField = tns;
+if (filterField) {
+  if (filterField === "DISTRICT") {
+    filteredTnsByField = tns.filter((t) => {
+      const field = t[filterField];
+      return !!field && typeof field.value === "string" && field.value.trim() !== "";
+    });
+    const filteredIds = filteredTnsByField
+      .map((t) => t.documentId)
+      .filter(Boolean);
+    console.log(
+      `[ФИЛЬТР PATCHED] ${filterField} not empty — documentIds:`,
+      filteredIds
+    );
+  } else {
     const min = minValue !== null ? Number(minValue) : 1;
     filteredTnsByField = tns.filter((t) => {
       const field = t[filterField];
@@ -293,6 +306,7 @@ export default function MainContent() {
       filteredIds
     );
   }
+}
   useEffect(() => {
     if (token) fetchTns(token);
   }, [token, fetchTns]);
