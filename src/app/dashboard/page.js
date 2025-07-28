@@ -1,6 +1,7 @@
 "use client";
 import React, { useEffect, useState, useMemo } from "react";
 import { Suspense } from "react";
+import { YMaps, Map } from "@pbe/react-yandex-maps";
 import { Card, Row, Col, Spin, Table, Button } from "antd";
 import {
   ThunderboltOutlined,
@@ -613,21 +614,28 @@ function Dashboard() {
       <div
         style={{
           width: "100%",
-          background: "#f3f7fa",
           borderRadius: 18,
-          minHeight: 220,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
+          minHeight: 400,
+          overflow: "hidden",
           marginBottom: 38,
         }}
       >
-        <div style={{ textAlign: "center", color: "#b6b6b6" }}>
-          <EnvironmentOutlined style={{ fontSize: 64, marginBottom: 18 }} />
-          <div style={{ fontSize: 19, fontWeight: 500, opacity: 0.85 }}>
-            [Карта в разработке]
-          </div>
-        </div>
+        <YMaps>
+          <Map
+            defaultState={{
+              center: [55.753215, 37.622504],
+              zoom: 8,
+              controls: ["zoomControl"],
+            }}
+            width="100%"
+            height={400}
+            options={{
+              suppressMapOpenBlock: true,
+              yandexMapDisablePoiInteractivity: true,
+            }}
+            modules={["control.ZoomControl"]}
+          />
+        </YMaps>
       </div>
 
       {/* Задействовано сил и средств */}
