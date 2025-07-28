@@ -1,4 +1,3 @@
-// eslint-disable-next-line spaced-comment
 "use client";
 import { useSearchParams } from "next/navigation";
 import React, { useEffect, useState, useMemo, useRef } from "react";
@@ -33,10 +32,7 @@ import {
 import { useSession } from "next-auth/react";
 import SendButtons from "../client/mainContent/SendButtons";
 import AiButton from "../client/mainContent/AiButton";
-import {
-  useTnsDataStore,
-  useTnFilters,
-} from "@/stores/tnsDataStore";
+import { useTnsDataStore, useTnFilters } from "@/stores/tnsDataStore";
 dayjs.locale("ru");
 const { Title } = Typography;
 
@@ -282,25 +278,18 @@ export default function MainContent() {
     const min = minValue !== null ? Number(minValue) : 1;
     filteredTnsByField = tns.filter((t) => {
       const field = t[filterField];
-      if (!field) return false; // пропуск, если поля нет вовсе
-      const val = field.value;
-      // Явно фильтруем только валидные значения
-      if (typeof val === "number") {
-        if (val === null || val === undefined || Number.isNaN(val))
-          return false;
-        return Number(val) >= min;
-      }
-      if (typeof val === "string") {
-        return val.trim() !== "" && val !== "—";
-      }
-      return false;
+      if (!field) return false;
+      // Явно фильтруем только числа (или строки, которые приводятся к числу)
+      const val =
+        typeof field.value === "string" ? Number(field.value) : field.value;
+      if (typeof val !== "number" || isNaN(val)) return false;
+      return val >= min;
     });
-    // 👉 Добавляем вывод documentId только релевантных ТН
     const filteredIds = filteredTnsByField
       .map((t) => t.documentId)
       .filter(Boolean);
     console.log(
-      `[ФИЛЬТР] ${filterField} >= ${min} — documentIds:`,
+      `[ФИЛЬТР PATCHED] ${filterField} >= ${min} — documentIds:`,
       filteredIds
     );
   }

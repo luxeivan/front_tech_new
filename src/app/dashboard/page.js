@@ -656,26 +656,6 @@ export default function Dashboard() {
         </Row>
       </Card>
 
-      {/* Таблица с отфильтрованными ТН */}
-      <div style={{ marginTop: 40 }}>
-        <div style={{ marginBottom: 16, textAlign: "right" }}>
-          <Button
-            onClick={() => {
-              console.log("[DEBUG] Reset filters button clicked");
-              updateFilter(null);
-            }}
-            disabled={!filterField}
-          >
-            Сбросить фильтры
-          </Button>
-        </div>
-        <Table
-          dataSource={filteredTns}
-          columns={columns}
-          rowKey={(record) => record.ID?.value || record.key || Math.random()}
-          pagination={{ pageSize: 10 }}
-        />
-      </div>
     </div>
   );
 }
