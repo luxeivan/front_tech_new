@@ -1,5 +1,6 @@
 "use client";
 import React, { useEffect, useState, useMemo } from "react";
+import { Suspense } from "react";
 import { Card, Row, Col, Spin, Table, Button } from "antd";
 import {
   ThunderboltOutlined,
@@ -214,7 +215,7 @@ const MainMetricCard = ({ value, onClick }) => {
   );
 };
 
-export default function Dashboard() {
+function Dashboard() {
   const tns = useTnsDataStore((state) => state.tns);
   const loading = useTnsDataStore((state) => state.loading);
   const fetchTns = useTnsDataStore((state) => state.fetchTns);
@@ -657,5 +658,13 @@ export default function Dashboard() {
       </Card>
 
     </div>
+  );
+}
+
+export default function Page() {
+  return (
+    <Suspense fallback={<div>Загрузка...</div>}>
+      <Dashboard />
+    </Suspense>
   );
 }
