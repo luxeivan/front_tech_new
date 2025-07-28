@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect } from "react";
-import { Card, Row, Col, Spin, Button } from "antd";
+import { Card, Row, Col, Spin } from "antd";
 import {
   ThunderboltOutlined,
   HomeOutlined,
@@ -29,7 +29,7 @@ function formatNumber(val) {
 }
 
 // Карточка для метрики
-const MetricCard = ({ icon, title, value, color, showButton }) => (
+const MetricCard = ({ icon, title, value, color }) => (
   <Card
     style={{
       borderRadius: 16,
@@ -39,9 +39,11 @@ const MetricCard = ({ icon, title, value, color, showButton }) => (
       flexDirection: "column",
       justifyContent: "center",
       padding: "0 0 0 0",
+      cursor: "pointer",
     }}
     bodyStyle={{ padding: "16px 22px" }}
     hoverable
+    onClick={() => (window.location.href = "/")}
   >
     <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
       <div
@@ -86,43 +88,26 @@ const MetricCard = ({ icon, title, value, color, showButton }) => (
             ? formatNumber(value)
             : "—"}
         </div>
-        {showButton && (
-          <Button
-            type="primary"
-            style={{
-              marginTop: 8,
-              borderRadius: 7,
-              fontWeight: 600,
-              fontSize: 15,
-              padding: "4px 14px",
-              cursor: "pointer",
-              transition: "background .17s",
-            }}
-            onClick={() => (window.location.href = "/")}
-          >
-            подробно
-          </Button>
-        )}
       </div>
     </div>
   </Card>
 );
 
-// Основная карточка с количеством всех отключений, увеличенная и выделенная
-const MainMetricCard = ({ value, currentDateTime }) => {
+// Основная карточка с количеством всех отключений, уменьшенная и выделенная
+const MainMetricCard = ({ value }) => {
   // Применяем уменьшение размера шрифта для очень больших чисел (больше 6 цифр)
   const valueStr = typeof value === "number" && !isNaN(value) && value !== 0 ? formatNumber(value) : "—";
   const isLargeNumber = valueStr.replace(/\D/g, '').length > 6;
-  const fontSizeNumber = isLargeNumber ? 54 : 80;
+  const fontSizeNumber = isLargeNumber ? 36 : 53;
 
   return (
     <Card
       style={{
-        borderRadius: 28,
+        borderRadius: 18,
         boxShadow: "0 8px 24px rgba(21,117,188,0.23)",
-        minHeight: 230,
-        minWidth: 380,
-        maxWidth: 520,
+        minHeight: 155,
+        minWidth: 253,
+        maxWidth: 347,
         width: "100%",
         border: "3px solid #1575bc",
         background: "rgba(21,117,188,0.07)",
@@ -138,28 +123,18 @@ const MainMetricCard = ({ value, currentDateTime }) => {
         position: "relative",
       }}
       hoverable
-      bodyStyle={{ padding: "24px 28px" }}
+      bodyStyle={{ padding: "16px 20px" }}
     >
       <div
         style={{
-          fontWeight: 700,
-          color: "#1575bc",
-          fontSize: 20,
-          marginBottom: 5,
-          letterSpacing: 0.1,
-        }}
-      >
-        По состоянию на
-      </div>
-      <div
-        style={{
           fontWeight: 600,
-          color: "#1a1a1a",
-          fontSize: 20,
-          marginBottom: 16,
+          color: "#1575bc",
+          fontSize: 24,
+          marginBottom: 4,
+          letterSpacing: 0.5,
         }}
       >
-        {currentDateTime}
+        Всего
       </div>
       <div
         style={{
@@ -167,7 +142,7 @@ const MainMetricCard = ({ value, currentDateTime }) => {
           alignItems: "flex-end",
           justifyContent: "center",
           width: "100%",
-          marginBottom: 8,
+          marginBottom: 4,
         }}
       >
         <span
@@ -188,11 +163,11 @@ const MainMetricCard = ({ value, currentDateTime }) => {
         </span>
         <span
           style={{
-            fontSize: 28,
+            fontSize: 18,
             fontWeight: 800,
             color: "#1575bc",
-            marginLeft: 14,
-            marginBottom: 7,
+            marginLeft: 10,
+            marginBottom: 4,
             letterSpacing: 2,
             whiteSpace: "nowrap",
           }}
@@ -251,7 +226,6 @@ export default function Dashboard() {
         0
       ),
       color: "#faad14",
-      showButton: true,
     },
     {
       icon: <EnvironmentOutlined />,
@@ -261,7 +235,6 @@ export default function Dashboard() {
         0
       ),
       color: "#52c41a",
-      showButton: true,
     },
     {
       icon: <HomeOutlined />,
@@ -270,7 +243,6 @@ export default function Dashboard() {
         tns.map((item) => item.DISTRICT?.value).filter(Boolean)
       ).size,
       color: "#1890ff",
-      showButton: true,
     },
     {
       icon: <TeamOutlined />,
@@ -280,7 +252,6 @@ export default function Dashboard() {
         0
       ),
       color: "#722ed1",
-      showButton: true,
     },
     {
       icon: <ApartmentOutlined />,
@@ -290,7 +261,6 @@ export default function Dashboard() {
         0
       ),
       color: "#fa541c",
-      showButton: true,
     },
     {
       icon: <BankOutlined />,
@@ -300,7 +270,6 @@ export default function Dashboard() {
         0
       ),
       color: "#fa8c16",
-      showButton: true,
     },
     {
       icon: <ShopOutlined />,
@@ -310,7 +279,6 @@ export default function Dashboard() {
         0
       ),
       color: "#52c41a",
-      showButton: true,
     },
     {
       icon: <FireOutlined />,
@@ -320,7 +288,6 @@ export default function Dashboard() {
         0
       ),
       color: "#eb2f96",
-      showButton: true,
     },
     {
       icon: <DashboardOutlined />,
@@ -330,7 +297,6 @@ export default function Dashboard() {
         0
       ),
       color: "#13c2c2",
-      showButton: true,
     },
     {
       icon: <ExperimentOutlined />,
@@ -340,7 +306,6 @@ export default function Dashboard() {
         0
       ),
       color: "#722ed1",
-      showButton: true,
     },
     {
       icon: <BuildOutlined />,
@@ -350,7 +315,6 @@ export default function Dashboard() {
         0
       ),
       color: "#faad14",
-      showButton: true,
     },
     {
       icon: <MedicineBoxOutlined />,
@@ -360,7 +324,6 @@ export default function Dashboard() {
         0
       ),
       color: "#1890ff",
-      showButton: true,
     },
     {
       icon: <MedicineBoxOutlined />,
@@ -370,7 +333,6 @@ export default function Dashboard() {
         0
       ),
       color: "#722ed1",
-      showButton: true,
     },
     {
       icon: <ReadOutlined />,
@@ -380,7 +342,6 @@ export default function Dashboard() {
         0
       ),
       color: "#52c41a",
-      showButton: true,
     },
     {
       icon: <SmileOutlined />,
@@ -390,7 +351,6 @@ export default function Dashboard() {
         0
       ),
       color: "#fa541c",
-      showButton: true,
     },
   ];
 
@@ -439,7 +399,7 @@ export default function Dashboard() {
       <h2
         style={{
           textAlign: "center",
-          marginBottom: 40,
+          marginBottom: 16,
           color: "#1575bc",
           fontWeight: "bold",
           fontSize: 32,
@@ -449,6 +409,19 @@ export default function Dashboard() {
       >
         АВАРИЙНЫЕ ОТКЛЮЧЕНИЯ В ЭЛЕКТРИЧЕСКИХ СЕТЯХ АО «МОСОБЛЭНЕРГО»
       </h2>
+      <div
+        style={{
+          textAlign: "center",
+          fontWeight: "bold",
+          fontSize: 20,
+          marginBottom: 40,
+          color: "#1575bc",
+          userSelect: "none",
+          letterSpacing: 0.5,
+        }}
+      >
+        По состоянию на {currentDateTime}
+      </div>
       {/* Основные метрики — Grid из карточек */}
       <Row
         gutter={[32, 32]}
@@ -476,7 +449,7 @@ export default function Dashboard() {
             justifyContent: "center",
           }}
         >
-          <MainMetricCard value={outages} currentDateTime={currentDateTime} />
+          <MainMetricCard value={outages} />
         </Col>
         {metrics.map((m) => (
           <Col
