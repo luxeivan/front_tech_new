@@ -66,7 +66,7 @@ const DISTRICT_MAP = {
   "Шаховская г.о.": "77",
   "Щелково г.о.": "78",
   "Электрогорск г.о.": "89",
-  "Электросталь г.о.": "79"
+  "Электросталь г.о.": "79",
 };
 
 // Маппинг и константы МинЭнерго
@@ -119,11 +119,11 @@ const ME_FIELDS = [
   "VIOLATION_GUID_STR",
 ];
 
-// Добавленный маппинг TYPE_MAP
+// Маппинг для поля type (цифра в зависимости от типа заявки)
 const TYPE_MAP = {
-  "Аварийная заявка": "emergency",
-  "Неплановая заявка": "unplanned",
-  "Плановая заявка": "planned",
+  "Аварийная заявка": "1",
+  "Неплановая заявка": "2",
+  "Плановая заявка": "3",
 };
 
 // Функция форматирования даты и времени
@@ -164,43 +164,93 @@ export default function MinEnergoSender({ tn, updateField, open, onClose }) {
     }
   }, [open, tn]);
 
-  // Формируем JSON и выводим в консоль
-  const handleSend = () => {
-    const toDate = (v, withTime = false) => {
-      if (!v || v === "—") return null;
-      const d = new Date(v);
-      if (isNaN(d)) return null;
-      const pad = n => String(n).padStart(2, "0");
-      return withTime
-        ? `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-        : `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-    };
+  // Функция для форматирования даты
+  const toDate = (v, withTime = false) => {
+    if (!v || v === "—") return null;
+    const d = new Date(v);
+    if (isNaN(d)) return null;
+    const pad = (n) => String(n).padStart(2, "0");
+    return withTime
+      ? `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(
+          d.getDate()
+        )} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+      : `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  };
 
-    const payload = {
-      time_create: toDate(draft.F81_060_EVENTDATETIME, true),
-      incident_id: draft.VIOLATION_GUID_STR || tn.VIOLATION_GUID_STR || null,
-      type: TYPE_MAP[draft.VIOLATION_TYPE] || draft.VIOLATION_TYPE || null,
-      status:
-        STATUS_NAME_MAP[
-          (draft.STATUS_NAME || "")
-            .trim()
-            .replace(/^./, c => c.toUpperCase())
-        ] || null,
-      plan_date_close: toDate(draft.F81_070_RESTOR_SUPPLAYDATETIME),
-      count_people: draft.POPULATION_COUNT !== "—" ? draft.POPULATION_COUNT : null,
-      fio_response_work: draft.CREATE_USER !== "—" ? draft.CREATE_USER : null,
-      fio_response_phone: draft.fio_response_phone !== "—" ? draft.fio_response_phone : null,
-      description: draft.description !== "—" ? draft.description : null,
-      district_id: DISTRICT_MAP[draft.DISTRICT] || null,
-      resources: [5]
-    };
+  // Формируем JSON для отправки
+  const getPayload = () => ({
+    time_create: toDate(draft.F81_060_EVENTDATETIME, true),
+    incident_id: draft.VIOLATION_GUID_STR || tn.VIOLATION_GUID_STR || null,
+    type:
+      TYPE_MAP.hasOwnProperty(draft.VIOLATION_TYPE)
+        ? TYPE_MAP[draft.VIOLATION_TYPE]
+        : null,
+    status:
+      STATUS_NAME_MAP[
+        (draft.STATUS_NAME || "").trim().replace(/^./, (c) => c.toUpperCase())
+      ] || null,
+    plan_date_close: toDate(draft.F81_070_RESTOR_SUPPLAYDATETIME),
+    count_people:
+      draft.POPULATION_COUNT !== "—" ? draft.POPULATION_COUNT : null,
+    fio_response_work: draft.CREATE_USER !== "—" ? draft.CREATE_USER : null,
+    fio_response_phone:
+      draft.fio_response_phone !== "—" ? draft.fio_response_phone : null,
+    description: draft.description !== "—" ? draft.description : null,
+    district_id: DISTRICT_MAP[draft.DISTRICT] || null,
+    resources: [5],
+  });
 
-    console.log(
-      "Сформированный JSON для МинЭнерго:",
-      JSON.stringify(payload, null, 2)
-    );
-    message.success("Данные отправлены (заглушка)");
-    onClose();
+  // Тестировать (вывод в консоль)
+  const handleTest = () => {
+    const payload = getPayload();
+    // eslint-disable-next-line no-console
+    console.log("JSON для МинЭнерго:\n" + JSON.stringify(payload, null, 2));
+    message.success("JSON сгенерирован, смотри консоль");
+  };
+
+  // Отправить в МинЭнерго
+  const handleSend = async () => {
+    const payload = getPayload();
+    try {
+      const response = await fetch("/api/proxy-mvitu", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+      let text = await response.text();
+      let resBody;
+      try {
+        resBody = JSON.parse(text);
+      } catch {
+        resBody = text;
+      }
+      if (response.ok) {
+        onClose();
+        setTimeout(() => {
+          message.success(
+            `Успешно отправлено: ${
+              typeof resBody === "string" ? resBody : JSON.stringify(resBody)
+            }`
+          );
+        }, 400);
+      } else {
+        onClose();
+        setTimeout(() => {
+          message.error(
+            `Ошибка при отправке: ${
+              typeof resBody === "string" ? resBody : JSON.stringify(resBody)
+            }`
+          );
+        }, 400);
+      }
+    } catch (error) {
+      onClose();
+      setTimeout(() => {
+        message.error(`Ошибка при отправке: ${error.message}`);
+      }, 400);
+    }
   };
 
   return (
@@ -208,10 +258,19 @@ export default function MinEnergoSender({ tn, updateField, open, onClose }) {
       title="Отправка данных в МинЭнерго"
       open={open}
       onCancel={onClose}
-      onOk={handleSend}
-      okText="Отправить данные"
-      cancelText="Отмена"
+      // Убираем onOk, чтобы handleSend не вызывался дублирующе
       width={900}
+      footer={[
+        <Button key="test" onClick={handleTest}>
+          Тестировать (вывод в консоль)
+        </Button>,
+        <Button key="submit" type="primary" onClick={handleSend}>
+          Отправить в МинЭнерго
+        </Button>,
+        <Button key="cancel" onClick={onClose}>
+          Отмена
+        </Button>,
+      ]}
     >
       <Descriptions column={2} bordered size="small">
         {ME_FIELDS.map((k) => (
@@ -227,7 +286,9 @@ export default function MinEnergoSender({ tn, updateField, open, onClose }) {
             }}
           >
             {k === "DISTRICT"
-              ? `${draft[k] ?? "—"}${DISTRICT_MAP[draft[k]] ? ` (${DISTRICT_MAP[draft[k]]})` : ""}`
+              ? `${draft[k] ?? "—"}${
+                  DISTRICT_MAP[draft[k]] ? ` (${DISTRICT_MAP[draft[k]]})` : ""
+                }`
               : draft[k] ?? "—"}{" "}
             {(tn[k]?.edit === "Да" || NEW_FIELDS.includes(k)) && (
               <EditOutlined

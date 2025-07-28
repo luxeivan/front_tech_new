@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { Button, Space, Modal } from "antd";
 import MinEnergoSender from "./MinEnergoSender";
+import MosEnergoSbytSender from "./MosEnergoSbytSender";
 
 // === ПОЛЯ ДЛЯ ДРУГИХ МОДАЛОК (заглушки) ===
 const MOSENERGOSBYT_FIELDS = [];
@@ -12,6 +13,7 @@ const SITE_MOSOBLENERGO_FIELDS = [];
 export default function SendButtons({ tn, updateField }) {
   // Состояние открытия модалок для каждого направления
   const [openME, setOpenME] = useState(false);
+  const [openMES, setOpenMES] = useState(false);
 
   const stub = (dest) =>
     Modal.info({
@@ -28,7 +30,7 @@ export default function SendButtons({ tn, updateField }) {
         </Button>
         <Button
           style={{ background: "#722ED1", color: "#fff" }}
-          onClick={() => stub("МосЭнергоСбыт")}
+          onClick={() => setOpenMES(true)}
         >
           Отправить&nbsp;в&nbsp;МосЭнергоСбыт
         </Button>
@@ -48,6 +50,12 @@ export default function SendButtons({ tn, updateField }) {
         updateField={updateField}
         open={openME}
         onClose={() => setOpenME(false)}
+      />
+      <MosEnergoSbytSender
+        tn={tn}
+        updateField={updateField}
+        open={openMES}
+        onClose={() => setOpenMES(false)}
       />
       {/* Заглушки под другие формы можешь вставлять тут потом */}
     </>
