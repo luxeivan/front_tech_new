@@ -1,6 +1,6 @@
 "use client";
-import React, { useEffect } from "react";
-import { Card, Row, Col, Spin } from "antd";
+import React, { useEffect, useState, useMemo } from "react";
+import { Card, Row, Col, Spin, Table, Button } from "antd";
 import {
   ThunderboltOutlined,
   HomeOutlined,
@@ -22,6 +22,7 @@ import {
 import { useTnsDataStore } from "../../stores/tnsDataStore";
 import { useSession } from "next-auth/react";
 import dayjs from "dayjs";
+import { useRouter, useSearchParams } from "next/navigation";
 
 function formatNumber(val) {
   if (typeof val !== "number") return "—";
@@ -29,7 +30,7 @@ function formatNumber(val) {
 }
 
 // Карточка для метрики
-const MetricCard = ({ icon, title, value, color }) => (
+const MetricCard = ({ icon, title, value, color, filterField, onClick }) => (
   <Card
     style={{
       borderRadius: 16,
@@ -39,11 +40,16 @@ const MetricCard = ({ icon, title, value, color }) => (
       flexDirection: "column",
       justifyContent: "center",
       padding: "0 0 0 0",
-      cursor: "pointer",
+      cursor: filterField ? "pointer" : "default",
     }}
     bodyStyle={{ padding: "16px 22px" }}
-    hoverable
-    onClick={() => (window.location.href = "/")}
+    hoverable={!!filterField}
+    onClick={() => {
+      if (filterField) {
+        console.log("[DEBUG] MetricCard clicked filter:", filterField);
+        onClick(filterField);
+      }
+    }}
   >
     <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
       <div
@@ -94,10 +100,13 @@ const MetricCard = ({ icon, title, value, color }) => (
 );
 
 // Основная карточка с количеством всех отключений, уменьшенная и выделенная
-const MainMetricCard = ({ value }) => {
+const MainMetricCard = ({ value, onClick }) => {
   // Применяем уменьшение размера шрифта для очень больших чисел (больше 6 цифр)
-  const valueStr = typeof value === "number" && !isNaN(value) && value !== 0 ? formatNumber(value) : "—";
-  const isLargeNumber = valueStr.replace(/\D/g, '').length > 6;
+  const valueStr =
+    typeof value === "number" && !isNaN(value) && value !== 0
+      ? formatNumber(value)
+      : "—";
+  const isLargeNumber = valueStr.replace(/\D/g, "").length > 6;
   const fontSizeNumber = isLargeNumber ? 36 : 53;
 
   return (
@@ -121,9 +130,14 @@ const MainMetricCard = ({ value }) => {
         userSelect: "none",
         overflow: "hidden",
         position: "relative",
+        cursor: "pointer",
       }}
       hoverable
       bodyStyle={{ padding: "16px 20px" }}
+      onClick={() => {
+        console.log("[DEBUG] MainMetricCard clicked filter: none");
+        onClick(null);
+      }}
     >
       <div
         style={{
@@ -189,7 +203,10 @@ const MainMetricCard = ({ value }) => {
           transition: "background .17s",
           userSelect: "none",
         }}
-        onClick={() => (window.location.href = "/")}
+        onClick={() => {
+          console.log("[DEBUG] MainMetricCard button clicked: reset filters");
+          onClick(null);
+        }}
       >
         подробно
       </button>
@@ -204,9 +221,61 @@ export default function Dashboard() {
   const { data: session } = useSession();
   const token = session?.user?.jwt;
 
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const [filterField, setFilterField] = useState(null);
+  const [minValue, setMinValue] = useState(null);
+
   useEffect(() => {
     if (token) fetchTns(token);
   }, [token, fetchTns]);
+
+  // Считываем параметры фильтра из URL
+  useEffect(() => {
+    const filter = searchParams.get("filter");
+    const min = searchParams.get("min");
+    setFilterField(filter);
+    setMinValue(min !== null ? Number(min) : null);
+  }, [searchParams]);
+
+  // Функция для обновления параметров фильтра в URL
+  const updateFilter = (field) => {
+    if (!field) {
+      // Сброс фильтра
+      router.push(window.location.pathname);
+      setFilterField(null);
+      setMinValue(null);
+      return;
+    }
+    const min = 1;
+    router.push(`/?filter=${field}&min=${min}`);
+    setFilterField(field);
+    setMinValue(min);
+  };
+
+  // Фильтрация данных по фильтру и минимальному значению
+  const filteredTns = useMemo(() => {
+    if (!filterField) return tns;
+
+    console.log("[DEBUG]", filterField, "all values:", tns.map((t) => t[filterField]?.value));
+
+    if (filterField === "DISTRICT") {
+      // Фильтрация по населенным пунктам - показываем только те, у которых есть непустое значение DISTRICT
+      return tns.filter((item) => Boolean(item.DISTRICT?.value));
+    }
+
+    // Для всех остальных фильтров фильтруем по числовому значению >= minValue
+    if (minValue === null || isNaN(minValue)) return tns;
+
+    return tns.filter((item) => {
+      const val = item[filterField]?.value;
+      if (val === undefined || val === null) return false;
+      const numVal = Number(val);
+      if (isNaN(numVal)) return false;
+      return numVal >= minValue;
+    });
+  }, [tns, filterField, minValue]);
 
   if (loading || !tns) {
     return (
@@ -216,7 +285,7 @@ export default function Dashboard() {
     );
   }
 
-  // Массив для единого рендера: [{icon, title, value, color}]
+  // Массив для единого рендера: [{icon, title, value, color, filterField}]
   const metrics = [
     {
       icon: <ThunderboltOutlined />,
@@ -226,6 +295,7 @@ export default function Dashboard() {
         0
       ),
       color: "#faad14",
+      filterField: "TP_ALL",
     },
     {
       icon: <EnvironmentOutlined />,
@@ -235,14 +305,15 @@ export default function Dashboard() {
         0
       ),
       color: "#52c41a",
+      filterField: "LINESN_ALL",
     },
     {
       icon: <HomeOutlined />,
       title: "Населённых пунктов",
-      value: new Set(
-        tns.map((item) => item.DISTRICT?.value).filter(Boolean)
-      ).size,
+      value: new Set(tns.map((item) => item.DISTRICT?.value).filter(Boolean))
+        .size,
       color: "#1890ff",
+      filterField: "DISTRICT",
     },
     {
       icon: <TeamOutlined />,
@@ -252,6 +323,7 @@ export default function Dashboard() {
         0
       ),
       color: "#722ed1",
+      filterField: "POPULATION_COUNT",
     },
     {
       icon: <ApartmentOutlined />,
@@ -261,6 +333,7 @@ export default function Dashboard() {
         0
       ),
       color: "#fa541c",
+      filterField: "MKD_ALL",
     },
     {
       icon: <BankOutlined />,
@@ -270,6 +343,7 @@ export default function Dashboard() {
         0
       ),
       color: "#fa8c16",
+      filterField: "PRIVATE_HOUSE_ALL",
     },
     {
       icon: <ShopOutlined />,
@@ -279,6 +353,7 @@ export default function Dashboard() {
         0
       ),
       color: "#52c41a",
+      filterField: "SNT_ALL",
     },
     {
       icon: <FireOutlined />,
@@ -288,6 +363,7 @@ export default function Dashboard() {
         0
       ),
       color: "#eb2f96",
+      filterField: "BOILER_ALL",
     },
     {
       icon: <DashboardOutlined />,
@@ -297,6 +373,7 @@ export default function Dashboard() {
         0
       ),
       color: "#13c2c2",
+      filterField: "CTP_ALL",
     },
     {
       icon: <ExperimentOutlined />,
@@ -306,6 +383,7 @@ export default function Dashboard() {
         0
       ),
       color: "#722ed1",
+      filterField: "WELLS_ALL",
     },
     {
       icon: <BuildOutlined />,
@@ -315,6 +393,7 @@ export default function Dashboard() {
         0
       ),
       color: "#faad14",
+      filterField: "KNS_ALL",
     },
     {
       icon: <MedicineBoxOutlined />,
@@ -324,6 +403,7 @@ export default function Dashboard() {
         0
       ),
       color: "#1890ff",
+      filterField: "HOSPITALS_ALL",
     },
     {
       icon: <MedicineBoxOutlined />,
@@ -333,6 +413,7 @@ export default function Dashboard() {
         0
       ),
       color: "#722ed1",
+      filterField: "CLINICS_ALL",
     },
     {
       icon: <ReadOutlined />,
@@ -342,6 +423,7 @@ export default function Dashboard() {
         0
       ),
       color: "#52c41a",
+      filterField: "SCHOOLS_ALL",
     },
     {
       icon: <SmileOutlined />,
@@ -351,6 +433,7 @@ export default function Dashboard() {
         0
       ),
       color: "#fa541c",
+      filterField: "KINDERGARTENS_ALL",
     },
   ];
 
@@ -359,25 +442,37 @@ export default function Dashboard() {
     {
       icon: <TeamOutlined />,
       title: "Бригады",
-      value: tns.reduce((sum, item) => sum + (Number(item.BRIGADECOUNT?.value) || 0), 0),
+      value: tns.reduce(
+        (sum, item) => sum + (Number(item.BRIGADECOUNT?.value) || 0),
+        0
+      ),
       color: "#722ed1",
     },
     {
       icon: <UserOutlined />,
       title: "Люди",
-      value: tns.reduce((sum, item) => sum + (Number(item.EMPLOYEECOUNT?.value) || 0), 0),
+      value: tns.reduce(
+        (sum, item) => sum + (Number(item.EMPLOYEECOUNT?.value) || 0),
+        0
+      ),
       color: "#13c2c2",
     },
     {
       icon: <ToolOutlined />,
       title: "Техника",
-      value: tns.reduce((sum, item) => sum + (Number(item.SPECIALTECHNIQUECOUNT?.value) || 0), 0),
+      value: tns.reduce(
+        (sum, item) => sum + (Number(item.SPECIALTECHNIQUECOUNT?.value) || 0),
+        0
+      ),
       color: "#eb2f96",
     },
     {
       icon: <ThunderboltOutlined />,
       title: "ПЭС",
-      value: tns.reduce((sum, item) => sum + (Number(item.PES_COUNT?.value) || 0), 0),
+      value: tns.reduce(
+        (sum, item) => sum + (Number(item.PES_COUNT?.value) || 0),
+        0
+      ),
       color: "#faad14",
     },
   ];
@@ -385,6 +480,30 @@ export default function Dashboard() {
   // "Всего отключений"
   const outages = tns.length;
   const currentDateTime = dayjs().format("DD.MM.YYYY HH:mm");
+
+  // Табличные колонки для отображения filteredTns (пример)
+  const columns = [
+    {
+      title: "Название",
+      dataIndex: "name",
+      key: "name",
+      render: (_, record) => record.NAME?.value || "—",
+    },
+    {
+      title: "Населённый пункт",
+      dataIndex: "district",
+      key: "district",
+      render: (_, record) => record.DISTRICT?.value || "—",
+    },
+    {
+      title: "ТП",
+      dataIndex: "tp_all",
+      key: "tp_all",
+      render: (_, record) =>
+        record.TP_ALL?.value !== undefined ? record.TP_ALL.value : "—",
+    },
+    // Добавьте другие колонки по необходимости
+  ];
 
   return (
     <div
@@ -449,7 +568,7 @@ export default function Dashboard() {
             justifyContent: "center",
           }}
         >
-          <MainMetricCard value={outages} />
+          <MainMetricCard value={outages} onClick={updateFilter} />
         </Col>
         {metrics.map((m) => (
           <Col
@@ -466,7 +585,7 @@ export default function Dashboard() {
               justifyContent: "center",
             }}
           >
-            <MetricCard {...m} />
+            <MetricCard {...m} filterField={m.filterField} onClick={updateFilter} />
           </Col>
         ))}
       </Row>
@@ -536,6 +655,27 @@ export default function Dashboard() {
           ))}
         </Row>
       </Card>
+
+      {/* Таблица с отфильтрованными ТН */}
+      <div style={{ marginTop: 40 }}>
+        <div style={{ marginBottom: 16, textAlign: "right" }}>
+          <Button
+            onClick={() => {
+              console.log("[DEBUG] Reset filters button clicked");
+              updateFilter(null);
+            }}
+            disabled={!filterField}
+          >
+            Сбросить фильтры
+          </Button>
+        </div>
+        <Table
+          dataSource={filteredTns}
+          columns={columns}
+          rowKey={(record) => record.ID?.value || record.key || Math.random()}
+          pagination={{ pageSize: 10 }}
+        />
+      </div>
     </div>
   );
 }

@@ -1,4 +1,6 @@
+// eslint-disable-next-line spaced-comment
 "use client";
+import { useSearchParams } from "next/navigation";
 import React, { useEffect, useState, useMemo, useRef } from "react";
 import {
   Table,
@@ -34,7 +36,6 @@ import AiButton from "../client/mainContent/AiButton";
 import {
   useTnsDataStore,
   useTnFilters,
-  usePaging,
 } from "@/stores/tnsDataStore";
 dayjs.locale("ru");
 const { Title } = Typography;
@@ -264,11 +265,45 @@ function groupFields(record) {
   };
 }
 
+import { useRouter } from "next/navigation";
+
 export default function MainContent() {
   // ──────────────────────── 1. AUTH & STORE ────────────────────────
+  const searchParams = useSearchParams();
+  const filterField = searchParams.get("filter");
+  const minValue = searchParams.get("min");
   const { data: session } = useSession();
   const token = session?.user?.jwt;
   const { tns, loading, error, fetchTns, updateField } = useTnsDataStore();
+  // --- фильтрация по фильтру из searchParams ---
+  // --- фильтрация по фильтру из searchParams ---
+  let filteredTnsByField = tns;
+  if (filterField) {
+    const min = minValue !== null ? Number(minValue) : 1;
+    filteredTnsByField = tns.filter((t) => {
+      const field = t[filterField];
+      if (!field) return false; // пропуск, если поля нет вовсе
+      const val = field.value;
+      // Явно фильтруем только валидные значения
+      if (typeof val === "number") {
+        if (val === null || val === undefined || Number.isNaN(val))
+          return false;
+        return Number(val) >= min;
+      }
+      if (typeof val === "string") {
+        return val.trim() !== "" && val !== "—";
+      }
+      return false;
+    });
+    // 👉 Добавляем вывод documentId только релевантных ТН
+    const filteredIds = filteredTnsByField
+      .map((t) => t.documentId)
+      .filter(Boolean);
+    console.log(
+      `[ФИЛЬТР] ${filterField} >= ${min} — documentIds:`,
+      filteredIds
+    );
+  }
   useEffect(() => {
     if (token) fetchTns(token);
   }, [token, fetchTns]);
@@ -300,14 +335,21 @@ export default function MainContent() {
 
   // ──────────────────────── 2. Фильтры / Пагинация через хуки ───────
   const { filterableFields, filters, setFilterValue, filteredTns } =
-    useTnFilters();
+    useTnFilters(filteredTnsByField);
 
-  const {
-    page,
-    setPage,
-    current: currentRows,
-    pageSize,
-  } = usePaging(filteredTns, 10);
+  // ──────────────── New Pagination State ────────────────
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
+  const paginatedRows = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    const end = start + pageSize;
+    return filteredTnsByField.slice(start, end);
+  }, [filteredTnsByField, page]);
+
+  // Сброс страницы при изменении фильтра из url (filterField или minValue)
+  useEffect(() => {
+    setPage(1);
+  }, [filterField, minValue]);
 
   // ──────────────────────── 3. DATA ⇢ TABLE ROWS ────────────────────
   const [editing, setEditing] = useState(null); // редактируемое поле { tnId, docId, fieldKey, label }
@@ -352,7 +394,7 @@ export default function MainContent() {
     }
   };
 
-  const dataSource = currentRows.map((item) => ({
+  const dataSource = paginatedRows.map((item) => ({
     key: item.id,
     raw: item,
     number: item.F81_010_NUMBER?.value ?? "—",
@@ -381,9 +423,11 @@ export default function MainContent() {
     { title: "Дата/время", dataIndex: "eventDate", key: "eventDate" },
   ];
 
+  const router = useRouter();
   const clearFilters = () => {
     filterableFields.forEach((k) => setFilterValue(k, "Все"));
     setPage(1);
+    router.replace("/dashboard");
   };
 
   const expandedRowRender = (record) => {
@@ -600,6 +644,7 @@ export default function MainContent() {
           }}
         >
           {filterableFields.map((key) => {
+            // Используем исходный tns для фильтра и выпадающих списков
             const values = Array.from(
               new Set(tns.map((t) => t[key]?.value).filter(Boolean))
             );
@@ -609,7 +654,14 @@ export default function MainContent() {
                 key={key}
                 value={filters[key] ?? "Все"}
                 style={{ width: 220 }}
-                onChange={(val) => setFilterValue(key, val)}
+                onChange={(val) => {
+                  setFilterValue(key, val);
+                  // Если был активен url-фильтр, сбрасываем url и пагинацию
+                  if (filterField || minValue) {
+                    router.replace("/dashboard");
+                  }
+                  setPage(1);
+                }}
                 options={[
                   { value: "Все", label: `${label}: Все` },
                   ...values.map((v) => ({ value: v, label: v })),
@@ -641,7 +693,7 @@ export default function MainContent() {
             <div style={{ marginTop: 20, textAlign: "center" }}>
               <Pagination
                 current={page}
-                total={filteredTns.length}
+                total={filteredTnsByField.length}
                 pageSize={pageSize}
                 onChange={setPage}
               />
