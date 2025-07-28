@@ -106,55 +106,37 @@ export default function Dashboard() {
       title: "Отключено ТП",
       value: tns.reduce(
         (sum, item) =>
-          sum + ((item.TP_SECTION?.value || 0) + (item.TP_ALL?.value || 0)),
+          sum + (Number(item.TP_ALL?.value) || 0),
         0
       ),
       color: "#faad14",
     },
     {
       icon: <EnvironmentOutlined />,
-      title: "Отключено ЛЭП 6-10 кВ",
-      value: tns.reduce((sum, item) => sum + (item.lep?.value || 0), 0),
+      title: "Отключено ЛЭП 6-20 кВ (шт.)",
+      value: tns.reduce(
+        (sum, item) =>
+          sum + (Number(item.LINESN_ALL?.value) || 0),
+        0
+      ),
       color: "#52c41a",
     },
     {
       icon: <HomeOutlined />,
       title: "Населённых пунктов",
-      value: tns.reduce((sum, item) => sum + (item.towns?.value || 0), 0),
+      value: new Set(
+        tns.map(item => item.DISTRICT?.value).filter(Boolean)
+      ).size,
       color: "#1890ff",
     },
     {
       icon: <TeamOutlined />,
       title: "Население",
       value: tns.reduce(
-        (sum, item) => sum + (item.POPULATION_COUNT?.value || 0),
+        (sum, item) => sum + (Number(item.POPULATION_COUNT?.value) || 0),
         0
       ),
       color: "#722ed1",
-    },
-    {
-      icon: <HomeOutlined />,
-      title: "МКД",
-      value: tns.reduce((sum, item) => sum + (item.mcd?.value || 0), 0),
-      color: "#1890ff",
-    },
-    {
-      icon: <UserOutlined />,
-      title: "Частных домов",
-      value: tns.reduce((sum, item) => sum + (item.houses?.value || 0), 0),
-      color: "#13c2c2",
-    },
-    {
-      icon: <EnvironmentOutlined />,
-      title: "СНТ",
-      value: tns.reduce((sum, item) => sum + (item.snt?.value || 0), 0),
-      color: "#52c41a",
-    },
-    {
-      icon: <ToolOutlined />,
-      title: "Котельных",
-      value: tns.reduce((sum, item) => sum + (item.boiler?.value || 0), 0),
-      color: "#eb2f96",
     },
   ];
 
@@ -163,25 +145,25 @@ export default function Dashboard() {
     {
       icon: <TeamOutlined />,
       title: "Бригады",
-      value: tns.reduce((sum, item) => sum + (item.teams?.value || 0), 0),
+      value: tns.reduce((sum, item) => sum + (Number(item.BRIGADECOUNT?.value) || 0), 0),
       color: "#722ed1",
     },
     {
       icon: <UserOutlined />,
       title: "Люди",
-      value: tns.reduce((sum, item) => sum + (item.people?.value || 0), 0),
+      value: tns.reduce((sum, item) => sum + (Number(item.EMPLOYEECOUNT?.value) || 0), 0),
       color: "#13c2c2",
     },
     {
       icon: <ToolOutlined />,
       title: "Техника",
-      value: tns.reduce((sum, item) => sum + (item.vehicles?.value || 0), 0),
+      value: tns.reduce((sum, item) => sum + (Number(item.SPECIALTECHNIQUECOUNT?.value) || 0), 0),
       color: "#eb2f96",
     },
     {
       icon: <ThunderboltOutlined />,
       title: "ПЭС",
-      value: tns.reduce((sum, item) => sum + (item.pes?.value || 0), 0),
+      value: tns.reduce((sum, item) => sum + (Number(item.PES_COUNT?.value) || 0), 0),
       color: "#faad14",
     },
   ];
