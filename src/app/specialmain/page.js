@@ -13,7 +13,10 @@ import {
   Space,
   Descriptions,
   Divider,
+  Card,
+  Collapse,
   Tabs,
+  List,
 } from "antd";
 import ru_RU from "antd/locale/ru_RU";
 import dayjs from "dayjs";
@@ -352,6 +355,17 @@ export default function SpecialMainContent() {
     setPage(1);
   }, [filterField, minValue]);
 
+  /* responsive helper */
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== "undefined" ? window.innerWidth < 576 : false
+  );
+  useEffect(() => {
+    const onResize = () =>
+      setIsMobile(window.innerWidth < 576 /* bootstrap xs breakpoint */);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
   // ──────────────────────── 3. DATA ⇢ TABLE ROWS ────────────────────
 
   const dataSource = paginatedRows.map((item) => ({
@@ -382,6 +396,107 @@ export default function SpecialMainContent() {
     { title: "Статус", dataIndex: "status", key: "status" },
     { title: "Дата/время", dataIndex: "eventDate", key: "eventDate" },
   ];
+
+  /* ─────── Mobile card renderer ─────── */
+  const renderMobileList = () => {
+    return (
+      <>
+        <List
+          dataSource={paginatedRows}
+          renderItem={(record) => {
+            const groups = groupFields(record);
+            // Add helper to wrap long text
+            const wrapVal = (val) => (
+              <span style={{ wordBreak: "break-word", whiteSpace: "pre-wrap" }}>
+                {val}
+              </span>
+            );
+            return (
+              <Card
+                key={record.id}
+                title={`ТН ${record.F81_010_NUMBER?.value ?? "—"}`}
+                style={{ marginBottom: 12 }}
+              >
+                <Collapse
+                  ghost
+                  items={[
+                    {
+                      key: "1",
+                      label: "Основное",
+                      children: (
+                        <Descriptions
+                          size="small"
+                          column={1}
+                          items={groups.main.map(([k, v]) => ({
+                            key: k,
+                            label: v.label,
+                            children: wrapVal(String(v.value)),
+                          }))}
+                        />
+                      ),
+                    },
+                    {
+                      key: "2",
+                      label: "Даты и статусы",
+                      children: (
+                        <Descriptions
+                          size="small"
+                          column={1}
+                          items={groups.dateStatus.map(([k, v]) => ({
+                            key: k,
+                            label: v.label,
+                            children: wrapVal(String(v.value)),
+                          }))}
+                        />
+                      ),
+                    },
+                    {
+                      key: "3",
+                      label: "Отключения и потребители",
+                      children: (
+                        <Descriptions
+                          size="small"
+                          column={1}
+                          items={groups.outageConsumer.map(([k, v]) => ({
+                            key: k,
+                            label: v.label,
+                            children: wrapVal(String(v.value)),
+                          }))}
+                        />
+                      ),
+                    },
+                    {
+                      key: "4",
+                      label: "Потребности и ресурсы",
+                      children: (
+                        <Descriptions
+                          size="small"
+                          column={1}
+                          items={groups.resources.map(([k, v]) => ({
+                            key: k,
+                            label: v.label,
+                            children: wrapVal(String(v.value)),
+                          }))}
+                        />
+                      ),
+                    },
+                  ]}
+                />
+              </Card>
+            );
+          }}
+        />
+        <div style={{ textAlign: "center", marginTop: 12 }}>
+          <Pagination
+            current={page}
+            total={filteredTnsByField.length}
+            pageSize={pageSize}
+            onChange={setPage}
+          />
+        </div>
+      </>
+    );
+  };
 
   const router = useRouter();
   const clearFilters = () => {
@@ -528,7 +643,12 @@ export default function SpecialMainContent() {
   // ──────────────────────── 6. RENDER ───────────────────────────────
   return (
     <ConfigProvider locale={ru_RU}>
-      <div style={{ padding: 20 }}>
+      <div
+        style={{
+          padding: 20,
+          width: "100%",             // без ограничения maxWidth — десктоп не трогаем
+        }}
+      >
         <div
           style={{
             marginBottom: 16,
@@ -562,6 +682,7 @@ export default function SpecialMainContent() {
             display: "flex",
             flexWrap: "wrap",
             gap: 8,
+            width: "100%",
           }}
         >
           {filterableFields.map((key) => {
@@ -574,7 +695,7 @@ export default function SpecialMainContent() {
               <Select
                 key={key}
                 value={filters[key] ?? "Все"}
-                style={{ width: 220 }}
+                style={{ flex: "1 1 220px", maxWidth: 260 }}
                 onChange={(val) => {
                   setFilterValue(key, val);
                   // Если был активен url-фильтр, сбрасываем url и пагинацию
@@ -602,23 +723,29 @@ export default function SpecialMainContent() {
           </div>
         ) : (
           <>
-            <Table
-              columns={columns}
-              dataSource={dataSource}
-              pagination={false}
-              bordered
-              size="middle"
-              expandable={{ expandedRowRender }}
-              rowKey="key"
-            />
-            <div style={{ marginTop: 20, textAlign: "center" }}>
-              <Pagination
-                current={page}
-                total={filteredTnsByField.length}
-                pageSize={pageSize}
-                onChange={setPage}
-              />
-            </div>
+            {isMobile ? (
+              renderMobileList()
+            ) : (
+              <>
+                <Table
+                  columns={columns}
+                  dataSource={dataSource}
+                  pagination={false}
+                  bordered
+                  size="middle"
+                  expandable={{ expandedRowRender }}
+                  rowKey="key"
+                />
+                <div style={{ marginTop: 20, textAlign: "center" }}>
+                  <Pagination
+                    current={page}
+                    total={filteredTnsByField.length}
+                    pageSize={pageSize}
+                    onChange={setPage}
+                  />
+                </div>
+              </>
+            )}
           </>
         )}
       </div>
