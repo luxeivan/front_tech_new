@@ -1,27 +1,10 @@
 "use client";
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect } from "react";
 import { Suspense } from "react";
 import { YMaps, Map, Placemark } from "@pbe/react-yandex-maps";
-import { Card, Row, Col, Spin, Table, Button } from "antd";
-import {
-  ThunderboltOutlined,
-  HomeOutlined,
-  TeamOutlined,
-  UserOutlined,
-  ToolOutlined,
-  EnvironmentOutlined,
-  ApartmentOutlined,
-  BankOutlined,
-  ShopOutlined,
-  FireOutlined,
-  DashboardOutlined,
-  ExperimentOutlined,
-  BuildOutlined,
-  MedicineBoxOutlined,
-  ReadOutlined,
-  SmileOutlined,
-} from "@ant-design/icons";
+import { Card, Row, Col, Spin} from "antd";
 import { useTnsDataStore } from "../../stores/tnsDataStore";
+import { useDashboardStore } from "../../stores/dashboardStore";
 import { useSession } from "next-auth/react";
 import dayjs from "dayjs";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -31,7 +14,6 @@ function formatNumber(val) {
   return val.toLocaleString("ru-RU");
 }
 
-// Карточка для метрики
 const MetricCard = ({ icon, title, value, color, filterField, onClick }) => (
   <Card
     style={{
@@ -226,330 +208,58 @@ function Dashboard() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [filterField, setFilterField] = useState(null);
-  const [minValue, setMinValue] = useState(null);
+  const filterField = useDashboardStore((s) => s.filterField);
+  const minValue = useDashboardStore((s) => s.minValue);
+  const applyFilter = useDashboardStore((s) => s.applyFilter);
+  const tnCoords = useDashboardStore((s) => s.tnCoords);
+  const loadCoordsFromTns = useDashboardStore((s) => s.loadCoordsFromTns);
+  const metrics = useDashboardStore((s) => s.metrics);
+  const stats = useDashboardStore((s) => s.stats);
+  const outages = useDashboardStore((s) => s.outages);
 
   useEffect(() => {
     if (token) fetchTns(token);
   }, [token, fetchTns]);
 
+  // Подтягиваем координаты через стор
+  useEffect(() => {
+    loadCoordsFromTns(tns);
+  }, [tns, loadCoordsFromTns]);
+
   // Считываем параметры фильтра из URL
   useEffect(() => {
     const filter = searchParams.get("filter");
-    const min = searchParams.get("min");
-    setFilterField(filter);
-    setMinValue(min !== null ? Number(min) : null);
-  }, [searchParams]);
+    const minStr = searchParams.get("min");
+    const min = minStr !== null ? Number(minStr) : null;
+    applyFilter(filter, min, tns);
+  }, [searchParams, tns, applyFilter]);
 
   // Функция для обновления параметров фильтра в URL
   const updateFilter = (field) => {
     if (!field) {
-      // Сброс фильтра: переход на главную страницу со всеми ТН
       router.push("/");
-      setFilterField(null);
-      setMinValue(null);
+      applyFilter(null, null, tns);
       return;
     }
     if (field === "DISTRICT") {
       router.push("/?filter=DISTRICT&min=1");
-      setFilterField("DISTRICT");
-      setMinValue(1);
+      applyFilter("DISTRICT", 1, tns);
       return;
     }
     const min = 1;
     router.push(`/?filter=${field}&min=${min}`);
-    setFilterField(field);
-    setMinValue(min);
+    applyFilter(field, min, tns);
   };
 
-  // Фильтрация данных по фильтру и минимальному значению
-  const filteredTns = useMemo(() => {
-    if (!filterField) return tns;
-
-    if (filterField === "DISTRICT") {
-      // Фильтруем только те ТН, где DISTRICT — не пустая строка и не "—"
-      const filtered = tns.filter((item) => {
-        // Может быть как строка, так и объект { value }
-        const val =
-          typeof item.DISTRICT === "string"
-            ? item.DISTRICT
-            : (item.DISTRICT && typeof item.DISTRICT.value === "string" ? item.DISTRICT.value : "");
-        return !!val && typeof val === "string" && val.trim() !== "" && val.trim() !== "—";
-      });
-      // Дебаг: выводим id найденных ТН
-      console.log(
-        "[ФИЛЬТР PATCHED] DISTRICT not empty — documentIds:",
-        filtered.map((t) => t.documentId).filter(Boolean)
-      );
-      return filtered;
-    }
-    if (minValue === null || isNaN(minValue)) return tns;
-    return tns.filter((item) => {
-      const val = item[filterField]?.value;
-      if (val === undefined || val === null) return false;
-      const numVal = Number(val);
-      if (isNaN(numVal)) return false;
-      return numVal >= minValue;
-    });
-  }, [tns, filterField, minValue]);
-
-  // Всегда рендерим хуки одинаково, не делаем ранний return
-
-  // Массив для единого рендера: [{icon, title, value, color, filterField}]
-  const metrics = [
-    {
-      icon: <ThunderboltOutlined />,
-      title: "Отключено ТП",
-      value: tns.reduce(
-        (sum, item) => sum + (Number(item.TP_ALL?.value) || 0),
-        0
-      ),
-      color: "#faad14",
-      filterField: "TP_ALL",
-    },
-    {
-      icon: <EnvironmentOutlined />,
-      title: "Отключено ЛЭП 6-20 кВ (шт.)",
-      value: tns.reduce(
-        (sum, item) => sum + (Number(item.LINESN_ALL?.value) || 0),
-        0
-      ),
-      color: "#52c41a",
-      filterField: "LINESN_ALL",
-    },
-    {
-      icon: <HomeOutlined />,
-      title: "Населённых пунктов",
-      value: new Set(tns.map((item) => item.DISTRICT?.value).filter(Boolean))
-        .size,
-      color: "#1890ff",
-      filterField: "DISTRICT",
-    },
-    {
-      icon: <TeamOutlined />,
-      title: "Население",
-      value: tns.reduce(
-        (sum, item) => sum + (Number(item.POPULATION_COUNT?.value) || 0),
-        0
-      ),
-      color: "#722ed1",
-      filterField: "POPULATION_COUNT",
-    },
-    {
-      icon: <ApartmentOutlined />,
-      title: "МКД",
-      value: tns.reduce(
-        (sum, item) => sum + (Number(item.MKD_ALL?.value) || 0),
-        0
-      ),
-      color: "#fa541c",
-      filterField: "MKD_ALL",
-    },
-    {
-      icon: <BankOutlined />,
-      title: "Частные дома",
-      value: tns.reduce(
-        (sum, item) => sum + (Number(item.PRIVATE_HOUSE_ALL?.value) || 0),
-        0
-      ),
-      color: "#fa8c16",
-      filterField: "PRIVATE_HOUSE_ALL",
-    },
-    {
-      icon: <ShopOutlined />,
-      title: "СНТ",
-      value: tns.reduce(
-        (sum, item) => sum + (Number(item.SNT_ALL?.value) || 0),
-        0
-      ),
-      color: "#52c41a",
-      filterField: "SNT_ALL",
-    },
-    {
-      icon: <FireOutlined />,
-      title: "Котельных",
-      value: tns.reduce(
-        (sum, item) => sum + (Number(item.BOILER_ALL?.value) || 0),
-        0
-      ),
-      color: "#eb2f96",
-      filterField: "BOILER_ALL",
-    },
-    {
-      icon: <DashboardOutlined />,
-      title: "ЦТП",
-      value: tns.reduce(
-        (sum, item) => sum + (Number(item.CTP_ALL?.value) || 0),
-        0
-      ),
-      color: "#13c2c2",
-      filterField: "CTP_ALL",
-    },
-    {
-      icon: <ExperimentOutlined />,
-      title: "ВЗУ",
-      value: tns.reduce(
-        (sum, item) => sum + (Number(item.WELLS_ALL?.value) || 0),
-        0
-      ),
-      color: "#722ed1",
-      filterField: "WELLS_ALL",
-    },
-    {
-      icon: <BuildOutlined />,
-      title: "КНС",
-      value: tns.reduce(
-        (sum, item) => sum + (Number(item.KNS_ALL?.value) || 0),
-        0
-      ),
-      color: "#faad14",
-      filterField: "KNS_ALL",
-    },
-    {
-      icon: <MedicineBoxOutlined />,
-      title: "Больниц",
-      value: tns.reduce(
-        (sum, item) => sum + (Number(item.HOSPITALS_ALL?.value) || 0),
-        0
-      ),
-      color: "#1890ff",
-      filterField: "HOSPITALS_ALL",
-    },
-    {
-      icon: <MedicineBoxOutlined />,
-      title: "Поликлиник",
-      value: tns.reduce(
-        (sum, item) => sum + (Number(item.CLINICS_ALL?.value) || 0),
-        0
-      ),
-      color: "#722ed1",
-      filterField: "CLINICS_ALL",
-    },
-    {
-      icon: <ReadOutlined />,
-      title: "Школ",
-      value: tns.reduce(
-        (sum, item) => sum + (Number(item.SCHOOLS_ALL?.value) || 0),
-        0
-      ),
-      color: "#52c41a",
-      filterField: "SCHOOLS_ALL",
-    },
-    {
-      icon: <SmileOutlined />,
-      title: "Детских садов",
-      value: tns.reduce(
-        (sum, item) => sum + (Number(item.KINDERGARTENS_ALL?.value) || 0),
-        0
-      ),
-      color: "#fa541c",
-      filterField: "KINDERGARTENS_ALL",
-    },
-  ];
-
-  // "Задействовано сил и средств"
-  const stats = [
-    {
-      icon: <TeamOutlined />,
-      title: "Бригады",
-      value: tns.reduce(
-        (sum, item) => sum + (Number(item.BRIGADECOUNT?.value) || 0),
-        0
-      ),
-      color: "#722ed1",
-    },
-    {
-      icon: <UserOutlined />,
-      title: "Люди",
-      value: tns.reduce(
-        (sum, item) => sum + (Number(item.EMPLOYEECOUNT?.value) || 0),
-        0
-      ),
-      color: "#13c2c2",
-    },
-    {
-      icon: <ToolOutlined />,
-      title: "Техника",
-      value: tns.reduce(
-        (sum, item) => sum + (Number(item.SPECIALTECHNIQUECOUNT?.value) || 0),
-        0
-      ),
-      color: "#eb2f96",
-    },
-    {
-      icon: <ThunderboltOutlined />,
-      title: "ПЭС",
-      value: tns.reduce(
-        (sum, item) => sum + (Number(item.PES_COUNT?.value) || 0),
-        0
-      ),
-      color: "#faad14",
-    },
-  ];
-
-  // "Всего отключений"
-  const outages = tns.length;
-  const currentDateTime = dayjs().format("DD.MM.YYYY HH:mm");
-
-  // --- Состояние для координат инцидентов ---
-  const [tnCoords, setTnCoords] = useState([]);
-
-  // --- useEffect для загрузки координат по FIAS ---
+  // Пересчитать фильтрацию / агрегаты при первом получении tns
   useEffect(() => {
-    if (!tns || tns.length === 0) {
-      setTnCoords([]);
-      return;
+    if (tns && tns.length) {
+      applyFilter(filterField, minValue, tns);
     }
-    // Собираем уникальные FIAS из tns
-    const fiasMap = {};
-    tns.forEach((item) => {
-      const fias = item.FIAS?.value || item.FIAS;
-      if (fias && !fiasMap[fias]) {
-        fiasMap[fias] = item;
-      }
-    });
-    const uniqueFias = Object.keys(fiasMap);
-    if (uniqueFias.length === 0) {
-      setTnCoords([]);
-      return;
-    }
-    let cancelled = false;
-    // Для каждого уникального FIAS делаем запрос к /api/dadata?query=<FIAS>&mode=address
-    (async () => {
-      const coordsArr = [];
-      for (const fias of uniqueFias) {
-        try {
-          // --- Здесь происходит запрос к dadata API ---
-          const resp = await fetch(`/api/dadata?query=${encodeURIComponent(fias)}&mode=address`);
-          if (!resp.ok) continue;
-          const data = await resp.json();
-          // Проверяем, что есть координаты
-          const lat = data?.location?.lat || data?.lat;
-          const lon = data?.location?.lon || data?.lon;
-          if (lat && lon) {
-            coordsArr.push({
-              id: fias,
-              coords: [parseFloat(lat), parseFloat(lon)],
-              label:
-                fiasMap[fias]?.NAME?.value ||
-                fiasMap[fias]?.NAME ||
-                fiasMap[fias]?.DISTRICT?.value ||
-                fiasMap[fias]?.DISTRICT ||
-                fias,
-            });
-          }
-        } catch (err) {
-          // ignore
-        }
-      }
-      if (!cancelled) {
-        setTnCoords(coordsArr);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [tns]);
+  }, [tns]); // eslint-disable-line react-hooks/exhaustive-deps
+
+
+  const currentDateTime = dayjs().format("DD.MM.YYYY HH:mm");
 
   // Табличные колонки для отображения filteredTns (пример)
   const columns = [
@@ -591,172 +301,177 @@ function Dashboard() {
         </div>
       ) : (
         <>
-      <h2
-        style={{
-          textAlign: "center",
-          marginBottom: 16,
-          color: "#1575bc",
-          fontWeight: "bold",
-          fontSize: 32,
-          userSelect: "none",
-          letterSpacing: 0.5,
-        }}
-      >
-        АВАРИЙНЫЕ ОТКЛЮЧЕНИЯ В ЭЛЕКТРИЧЕСКИХ СЕТЯХ АО «МОСОБЛЭНЕРГО»
-      </h2>
-      <div
-        style={{
-          textAlign: "center",
-          fontWeight: "bold",
-          fontSize: 20,
-          marginBottom: 40,
-          color: "#1575bc",
-          userSelect: "none",
-          letterSpacing: 0.5,
-        }}
-      >
-        По состоянию на {currentDateTime}
-      </div>
-      {/* Основные метрики — Grid из карточек */}
-      <Row
-        gutter={[32, 32]}
-        justify="center"
-        align="middle"
-        style={{
-          marginBottom: 36,
-          flexWrap: "wrap",
-          width: "100%",
-        }}
-      >
-        <Col
-          xs={24}
-          sm={24}
-          md={12}
-          lg={8}
-          xl={7}
-          style={{
-            minWidth: 340,
-            maxWidth: 500,
-            marginRight: 30,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <MainMetricCard value={outages} onClick={updateFilter} />
-        </Col>
-        {metrics.map((m) => (
-          <Col
-            key={m.title}
-            xs={24}
-            sm={12}
-            md={8}
-            lg={6}
-            xl={4}
+          <h2
             style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "stretch",
-              justifyContent: "center",
+              textAlign: "center",
+              marginBottom: 16,
+              color: "#1575bc",
+              fontWeight: "bold",
+              fontSize: 32,
+              userSelect: "none",
+              letterSpacing: 0.5,
             }}
           >
-            <MetricCard
-              {...m}
-              filterField={m.filterField}
-              onClick={updateFilter}
-            />
-          </Col>
-        ))}
-      </Row>
-
-      {/* Карта (на всю ширину) */}
-      <div
-        style={{
-          width: "100%",
-          borderRadius: 18,
-          minHeight: 400,
-          overflow: "hidden",
-          marginBottom: 38,
-        }}
-      >
-        <YMaps>
-          <Map
-            defaultState={{
-              center: [55.753215, 37.622504],
-              zoom: 8,
-              controls: ["zoomControl"],
+            ТЕХНОЛОГИЧЕСКИЕ НАРУШЕНИЯ В ЭЛЕКТРИЧЕСКИХ СЕТЯХ АО «МОСОБЛЭНЕРГО»
+          </h2>
+          <div
+            style={{
+              textAlign: "center",
+              fontWeight: "bold",
+              fontSize: 20,
+              marginBottom: 40,
+              color: "#1575bc",
+              userSelect: "none",
+              letterSpacing: 0.5,
             }}
-            width="100%"
-            height={400}
-            options={{
-              suppressMapOpenBlock: true,
-              yandexMapDisablePoiInteractivity: true,
-            }}
-            modules={["control.ZoomControl"]}
           >
-            {/* --- Здесь отображаем Placemark для каждой tnCoords с popup/label --- */}
-            {tnCoords.map((item) =>
-              item.coords ? (
-                <Placemark
-                  key={item.id}
-                  geometry={item.coords}
-                  properties={{
-                    balloonContent: item.label,
-                    hintContent: item.label,
-                  }}
-                />
-              ) : null
-            )}
-          </Map>
-        </YMaps>
-      </div>
-
-      {/* Задействовано сил и средств */}
-      <Card
-        style={{
-          borderRadius: 18,
-          boxShadow: "0 4px 14px rgba(21,117,188,0.08)",
-          padding: "30px 20px",
-          width: "100%",
-          maxWidth: "1600px",
-          margin: "0 auto",
-        }}
-      >
-        <div
-          style={{
-            fontWeight: 700,
-            fontSize: 20,
-            marginBottom: 20,
-            textAlign: "center",
-            color: "#232323",
-            letterSpacing: 0.5,
-          }}
-        >
-          Задействовано сил и средств Мособлэнерго
-        </div>
-        <Row gutter={[28, 28]} justify="space-around">
-          {stats.map((s) => (
+            По состоянию на {currentDateTime}
+          </div>
+          {/* Основные метрики — Grid из карточек */}
+          <Row
+            gutter={[32, 32]}
+            justify="center"
+            align="middle"
+            style={{
+              marginBottom: 36,
+              flexWrap: "wrap",
+              width: "100%",
+            }}
+          >
             <Col
-              key={s.title}
               xs={24}
-              sm={12}
-              md={6}
-              lg={6}
-              xl={6}
+              sm={24}
+              md={12}
+              lg={8}
+              xl={7}
               style={{
+                minWidth: 340,
+                maxWidth: 500,
+                marginRight: 30,
                 display: "flex",
                 flexDirection: "column",
-                alignItems: "stretch",
+                alignItems: "center",
                 justifyContent: "center",
               }}
             >
-              <MetricCard {...s} />
+              <MainMetricCard value={outages} onClick={updateFilter} />
             </Col>
-          ))}
-        </Row>
-      </Card>
-      </>
+            {metrics.map((m) => (
+              <Col
+                key={m.title}
+                xs={24}
+                sm={12}
+                md={8}
+                lg={6}
+                xl={4}
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "stretch",
+                  justifyContent: "center",
+                }}
+              >
+                <MetricCard
+                  {...m}
+                  filterField={m.filterField}
+                  onClick={updateFilter}
+                />
+              </Col>
+            ))}
+          </Row>
+
+          {/* Карта (на всю ширину) */}
+          <div
+            style={{
+              width: "100%",
+              borderRadius: 18,
+              minHeight: 400,
+              overflow: "hidden",
+              marginBottom: 38,
+            }}
+          >
+            <YMaps>
+              <Map
+                defaultState={{
+                  center: [55.753215, 37.622504],
+                  zoom: 8,
+                  controls: ["zoomControl"],
+                }}
+                width="100%"
+                height={400}
+                options={{
+                  suppressMapOpenBlock: true,
+                  yandexMapDisablePoiInteractivity: true,
+                }}
+                modules={["control.ZoomControl"]}
+              >
+                {/* --- Здесь отображаем Placemark для каждой tnCoords с popup/label --- */}
+                {tnCoords.map((p) =>
+                  p.coords ? (
+                    <Placemark
+                      key={p.id}
+                      geometry={p.coords}
+                      properties={{
+                        balloonContent: p.balloonContent || p.label,
+                        hintContent: p.label,
+                      }}
+                      modules={["geoObject.addon.balloon", "geoObject.addon.hint"]}
+                      options={{
+                        openBalloonOnClick: true,
+                        hideIconOnBalloonOpen: false,
+                      }}
+                    />
+                  ) : null
+                )}
+              </Map>
+            </YMaps>
+          </div>
+
+          {/* Задействовано сил и средств */}
+          <Card
+            style={{
+              borderRadius: 18,
+              boxShadow: "0 4px 14px rgba(21,117,188,0.08)",
+              padding: "30px 20px",
+              width: "100%",
+              maxWidth: "1600px",
+              margin: "0 auto",
+            }}
+          >
+            <div
+              style={{
+                fontWeight: 700,
+                fontSize: 20,
+                marginBottom: 20,
+                textAlign: "center",
+                color: "#232323",
+                letterSpacing: 0.5,
+              }}
+            >
+              Задействовано сил и средств Мособлэнерго
+            </div>
+            <Row gutter={[28, 28]} justify="space-around">
+              {stats.map((s) => (
+                <Col
+                  key={s.title}
+                  xs={24}
+                  sm={12}
+                  md={6}
+                  lg={6}
+                  xl={6}
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "stretch",
+                    justifyContent: "center",
+                  }}
+                >
+                  <MetricCard {...s} />
+                </Col>
+              ))}
+            </Row>
+          </Card>
+        </>
       )}
     </div>
   );
