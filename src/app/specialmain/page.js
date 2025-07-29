@@ -1,4 +1,5 @@
 "use client";
+import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import React, { useEffect, useState, useMemo, useRef } from "react";
 import {
@@ -260,7 +261,7 @@ function groupFields(record) {
 
 import { useRouter } from "next/navigation";
 
-export default function SpecialMainContent() {
+function SpecialMainContent() {
   // ──────────────────────── 1. AUTH & STORE ────────────────────────
   const searchParams = useSearchParams();
   const filterField = searchParams.get("filter");
@@ -646,7 +647,7 @@ export default function SpecialMainContent() {
       <div
         style={{
           padding: 20,
-          width: "100%",             // без ограничения maxWidth — десктоп не трогаем
+          width: "100%", // без ограничения maxWidth — десктоп не трогаем
         }}
       >
         <div
@@ -750,5 +751,13 @@ export default function SpecialMainContent() {
         )}
       </div>
     </ConfigProvider>
+  );
+}
+
+export default function Page() {
+  return (
+    <Suspense fallback={<div>Загрузка...</div>}>
+      <SpecialMainContent />
+    </Suspense>
   );
 }
