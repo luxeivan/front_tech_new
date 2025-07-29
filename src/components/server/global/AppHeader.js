@@ -13,7 +13,7 @@ export default async function AppHeader() {
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
-        padding: "0 20px",
+        padding: "0 12px",
       }}
     >
       {/* Логотип */}
@@ -21,12 +21,19 @@ export default async function AppHeader() {
         <Image
           src={logoBlue.src}
           alt="Логотип"
-          width={300}
-          height={150}
-          style={{ objectFit: "contain" }}
+          width={200}
+          height={100}
+          style={{
+            objectFit: "contain",
+            maxWidth: "60vw",
+            height: "auto",
+          }}
+          priority
         />
       </div>
-      <ButtonLogInOut />
+      <div style={{ flex: "0 0 auto" }}>
+        <ButtonLogInOut />
+      </div>
     </Header>
   );
 }
