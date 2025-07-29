@@ -20,6 +20,7 @@ const MetricCard = ({ icon, title, value, color, filterField, onClick }) => (
       borderRadius: 16,
       boxShadow: "0 2px 8px rgba(0,0,0,0.07)",
       minHeight: 108,
+      width: "100%",
       display: "flex",
       flexDirection: "column",
       justifyContent: "center",
@@ -329,13 +330,14 @@ function Dashboard() {
           </div>
           {/* Основные метрики — Grid из карточек */}
           <Row
-            gutter={[32, 32]}
+            gutter={{ xs: 8, sm: 16, md: 24, lg: 32 }}
             justify="center"
-            align="middle"
+            align="top"
             style={{
-              marginBottom: 36,
+              marginBottom: 24,
               flexWrap: "wrap",
               width: "100%",
+              padding: "0 8px",
             }}
           >
             <Col
@@ -345,9 +347,8 @@ function Dashboard() {
               lg={8}
               xl={7}
               style={{
-                minWidth: 340,
+                width: "100%",
                 maxWidth: 500,
-                marginRight: 30,
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "center",
@@ -365,6 +366,7 @@ function Dashboard() {
                 lg={6}
                 xl={4}
                 style={{
+                  width: "100%",
                   display: "flex",
                   flexDirection: "column",
                   alignItems: "stretch",
@@ -450,7 +452,7 @@ function Dashboard() {
             >
               Задействовано сил и средств Мособлэнерго
             </div>
-            <Row gutter={[28, 28]} justify="space-around">
+            <Row gutter={{ xs: 8, sm: 16, md: 24, lg: 28 }} justify="center">
               {stats.map((s) => (
                 <Col
                   key={s.title}
