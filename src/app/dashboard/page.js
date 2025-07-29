@@ -237,18 +237,19 @@ function Dashboard() {
 
   // Функция для обновления параметров фильтра в URL
   const updateFilter = (field) => {
+    const base = "/specialmain";
     if (!field) {
-      router.push("/");
+      router.push(base);
       applyFilter(null, null, tns);
       return;
     }
     if (field === "DISTRICT") {
-      router.push("/?filter=DISTRICT&min=1");
+      router.push(`${base}?filter=DISTRICT&min=1`);
       applyFilter("DISTRICT", 1, tns);
       return;
     }
     const min = 1;
-    router.push(`/?filter=${field}&min=${min}`);
+    router.push(`${base}?filter=${field}&min=${min}`);
     applyFilter(field, min, tns);
   };
 
