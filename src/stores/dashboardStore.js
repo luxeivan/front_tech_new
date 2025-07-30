@@ -55,7 +55,7 @@ export const useDashboardStore = create((set, get) => ({
       },
       {
         icon: <EnvironmentOutlined />,
-        title: "Отключено ЛЭП 6-20 кВ (шт.)",
+        title: "Отключено ЛЭП 6-20 кВ",
         value: tns.reduce((s, i) => s + (Number(i.LINESN_ALL?.value) || 0), 0),
         color: "#52c41a",
         filterField: "LINESN_ALL",
