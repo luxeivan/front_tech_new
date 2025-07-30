@@ -19,12 +19,15 @@ import {
 } from "@ant-design/icons";
 
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
 /**
  * Pure Zustand store for dashboard state.
  * Stores filter, fias cache, coords, and aggregates.
  */
-export const useDashboardStore = create((set, get) => ({
+export const useDashboardStore = create(
+  persist(
+    (set, get) => ({
   // --- UI filters ---
   filterField: null,
   minValue: null,
@@ -291,4 +294,10 @@ export const useDashboardStore = create((set, get) => ({
 
     set({ tnCoords: coords, fiasCache: cache });
   },
-}));
+    }),
+    {
+      name: "dashboard-cache",
+      partialize: (state) => ({ fiasCache: state.fiasCache }) // хранить только кэш DaData
+    }
+  )
+);

@@ -665,6 +665,9 @@ function SpecialMainContent() {
           </Title>
 
           <Space>
+            <Button color="green" variant="solid" onClick={clearFilters}>
+              Дашборд
+            </Button>
             <Button
               type="primary"
               icon={<ReloadOutlined />}
