@@ -358,12 +358,11 @@ export default function MainContent() {
   }, [filteredTnsByField]);
   // ──────────────── New Pagination State ────────────────
   const [page, setPage] = useState(1);
-  const pageSize = 10;
+  const [pageSize, setPageSize] = useState(10);     // page size is now dynamic
   const paginatedRows = useMemo(() => {
     const start = (page - 1) * pageSize;
-    const end = start + pageSize;
-    return sortedTnsByField.slice(start, end);
-  }, [sortedTnsByField, page]);
+    return sortedTnsByField.slice(start, start + pageSize);
+  }, [sortedTnsByField, page, pageSize]);
 
   // Сброс страницы при изменении фильтра из url (filterField или minValue)
   useEffect(() => {
@@ -420,6 +419,7 @@ export default function MainContent() {
     prodDept: item.SCNAME?.value ?? "—", // Производственное отделение
     branch: item.OWN_SCNAME?.value ?? "—", // Филиал
     objectN: item.F81_041_ENERGOOBJECTNAME?.value ?? "—", // Объект
+    address: item.ADDRESS_LIST?.value ?? "—", // Адреса
     dispCenter: item.DISPCENTER_NAME_?.value ?? "—", // Дисп. центр
     status: item.STATUS_NAME?.value ?? "—",
     eventDate: item.F81_060_EVENTDATETIME?.value
@@ -430,13 +430,14 @@ export default function MainContent() {
   // ──────────────────────── 4. COLUMNS ──────────────────────────────
   const columns = [
     { title: "№ ТН", dataIndex: "number", key: "number" },
-    {
-      title: "Производственное отделение",
-      dataIndex: "prodDept",
-      key: "prodDept",
-    },
-    { title: "Филиал", dataIndex: "branch", key: "branch" },
+    // {
+    //   title: "Производственное отделение",
+    //   dataIndex: "prodDept",
+    //   key: "prodDept",
+    // },
+    // { title: "Филиал", dataIndex: "branch", key: "branch" },
     { title: "Объект", dataIndex: "objectN", key: "objectN" },
+    { title: "Адреса", dataIndex: "address", key: "address" },
     { title: "Дисп. центр", dataIndex: "dispCenter", key: "dispCenter" },
     { title: "Статус", dataIndex: "status", key: "status" },
     { title: "Дата/время", dataIndex: "eventDate", key: "eventDate" },
@@ -714,11 +715,16 @@ export default function MainContent() {
             />
             <div style={{ marginTop: 20, textAlign: "center" }}>
             <Pagination
-                current={page}
-                total={sortedTnsByField.length}
-                pageSize={pageSize}
-                onChange={setPage}
-              />
+              current={page}
+              total={sortedTnsByField.length}
+              pageSize={pageSize}
+              showSizeChanger
+              pageSizeOptions={[10, 25, 50, 100]}
+              onChange={(p, ps) => {
+                setPage(p);
+                setPageSize(ps);
+              }}
+            />
             </div>
           </>
         )}
