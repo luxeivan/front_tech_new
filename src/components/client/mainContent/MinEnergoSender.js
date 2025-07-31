@@ -131,12 +131,11 @@ const TYPE_MAP = {
 const buildHouseObjects = (str) => {
   if (!str || typeof str !== "string") return [];
   return str
-    .split(/[,;]+/)           // разделители «;» или «,»
+    .split(/[,;]+/) // разделители «;» или «,»
     .map((s) => s.trim())
     .filter(Boolean)
     .map((fias) => ({
-      fias: fias.toLowerCase(), // МинЭнерго принимает нижний регистр
-      count_people: 0,
+      fias: fias.toLowerCase(),
     }));
 };
 
@@ -185,9 +184,9 @@ export default function MinEnergoSender({ tn, updateField, open, onClose }) {
     if (isNaN(d)) return null;
     const pad = (n) => String(n).padStart(2, "0");
     return withTime
-      ? `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(
-          d.getDate()
-        )} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+      ? `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(
+          d.getHours()
+        )}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
       : `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   };
 
@@ -198,13 +197,25 @@ export default function MinEnergoSender({ tn, updateField, open, onClose }) {
         ? draft.FIAS_LIST
         : tn.FIAS_LIST?.value || tn.FIAS_LIST || ""
     );
+    // Формируем блок с данными по линиям электропередачи
+    const electricLines = {
+      "110kv_count":
+        draft.LINE110_ALL !== "—"
+          ? String(draft.LINE110_ALL)
+          : tn.LINE110_ALL?.value ?? null,
+      "35kv_count":
+        draft.LINE35_ALL !== "—"
+          ? String(draft.LINE35_ALL)
+          : tn.LINE35_ALL?.value ?? null,
+      "6_20kv_count": "1", // дефолтное значение
+      "04kv_count": "Данных нет, будут позже", // временный плейсхолдер
+    };
     return {
       time_create: toDate(draft.F81_060_EVENTDATETIME, true),
       incident_id: draft.VIOLATION_GUID_STR || tn.VIOLATION_GUID_STR || null,
-      type:
-        TYPE_MAP.hasOwnProperty(draft.VIOLATION_TYPE)
-          ? TYPE_MAP[draft.VIOLATION_TYPE]
-          : null,
+      type: TYPE_MAP.hasOwnProperty(draft.VIOLATION_TYPE)
+        ? TYPE_MAP[draft.VIOLATION_TYPE]
+        : null,
       status:
         STATUS_NAME_MAP[
           (draft.STATUS_NAME || "").trim().replace(/^./, (c) => c.toUpperCase())
@@ -219,12 +230,31 @@ export default function MinEnergoSender({ tn, updateField, open, onClose }) {
       district_id: DISTRICT_MAP[draft.DISTRICT] || null,
       resources: [5],
       house_objects: houseObjects,
-      snt_objects: [{ fias: "0", name: "0" }],
-      school_objects: [{ fias: "0", name: "0" }],
-      kindergarten_objects: [{ fias: "0", name: "0" }],
-      hospital_objects: [{ fias: "0", name: "0" }],
-      polyclinic_objects: [{ fias: "0", name: "0" }],
-    
+      snt_objects: [
+        { fias: "Данных нет, будут позже", name: "Данных нет, будут позже" },
+      ],
+      school_objects: [
+        { fias: "Данных нет, будут позже", name: "Данных нет, будут позже" },
+      ],
+      kindergarten_objects: [
+        { fias: "Данных нет, будут позже", name: "Данных нет, будут позже" },
+      ],
+      hospital_objects: [
+        { fias: "Данных нет, будут позже", name: "Данных нет, будут позже" },
+      ],
+      polyclinic_objects: [
+        { fias: "Данных нет, будут позже", name: "Данных нет, будут позже" },
+      ],
+      boiler_room_objects: [
+        { fias: "Данных нет, будут позже", name: "Данных нет, будут позже" },
+      ],
+      water_intake_objects: [
+        { fias: "Данных нет, будут позже", name: "Данных нет, будут позже" },
+      ],
+      canalization_pumping_objects: [
+        { fias: "Данных нет, будут позже", name: "Данных нет, будут позже" },
+      ],
+      electric_lines: electricLines,
     };
   };
 
