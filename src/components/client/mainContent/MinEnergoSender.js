@@ -219,6 +219,11 @@ export default function MinEnergoSender({ tn, updateField, open, onClose }) {
       district_id: DISTRICT_MAP[draft.DISTRICT] || null,
       resources: [5],
       house_objects: houseObjects,
+      snt_objects: [{ fias: "0", name: "0" }],
+      school_objects: [{ fias: "0", name: "0" }],
+      kindergarten_objects: [{ fias: "0", name: "0" }],
+      hospital_objects: [{ fias: "0", name: "0" }],
+      polyclinic_objects: [{ fias: "0", name: "0" }],
     
     };
   };
