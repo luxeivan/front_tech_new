@@ -342,19 +342,47 @@ function SpecialMainContent() {
   const { filterableFields, filters, setFilterValue, filteredTns } =
     useTnFilters(filteredTnsByField);
 
+  // Сортируем по дате события (или дате создания) — новые заявки первыми
+  const sortedTnsByField = useMemo(() => {
+    const getTime = (t) => {
+      const d =
+        t.F81_060_EVENTDATETIME?.value ??
+        t.CREATE_DATETIME?.value ??
+        t.createdAt ??
+        0;
+      return dayjs(d).valueOf() || 0;
+    };
+    return [...filteredTnsByField].sort((a, b) => getTime(b) - getTime(a)); // desc
+  }, [filteredTnsByField]);
+
   // ──────────────── New Pagination State ────────────────
   const [page, setPage] = useState(1);
-  const pageSize = 10;
+  const [pageSize, setPageSize] = useState(10);
   const paginatedRows = useMemo(() => {
     const start = (page - 1) * pageSize;
     const end = start + pageSize;
-    return filteredTnsByField.slice(start, end);
-  }, [filteredTnsByField, page]);
+    //   return filteredTnsByField.slice(start, end);
+    // }, [filteredTnsByField, page, pageSize]);
+    return sortedTnsByField.slice(start, end);
+  }, [sortedTnsByField, page]);
 
   // Сброс страницы при изменении фильтра из url (filterField или minValue)
   useEffect(() => {
     setPage(1);
   }, [filterField, minValue]);
+
+  // --- Сортировка: свежие сначала ---
+  filteredTnsByField = [...filteredTnsByField].sort((a, b) => {
+    const dateB =
+      new Date(
+        b.F81_060_EVENTDATETIME?.value || b.CREATE_DATETIME?.value || 0
+      ).getTime() || 0;
+    const dateA =
+      new Date(
+        a.F81_060_EVENTDATETIME?.value || a.CREATE_DATETIME?.value || 0
+      ).getTime() || 0;
+    return dateB - dateA; // по убыванию
+  });
 
   /* responsive helper */
   const [isMobile, setIsMobile] = useState(
@@ -376,6 +404,7 @@ function SpecialMainContent() {
     prodDept: item.SCNAME?.value ?? "—", // Производственное отделение
     branch: item.OWN_SCNAME?.value ?? "—", // Филиал
     objectN: item.F81_041_ENERGOOBJECTNAME?.value ?? "—", // Объект
+    address: item.ADDRESS_LIST?.value ?? "—", // Адреса
     dispCenter: item.DISPCENTER_NAME_?.value ?? "—", // Дисп. центр
     status: item.STATUS_NAME?.value ?? "—",
     eventDate: item.F81_060_EVENTDATETIME?.value
@@ -386,13 +415,14 @@ function SpecialMainContent() {
   // ──────────────────────── 4. COLUMNS ──────────────────────────────
   const columns = [
     { title: "№ ТН", dataIndex: "number", key: "number" },
-    {
-      title: "Производственное отделение",
-      dataIndex: "prodDept",
-      key: "prodDept",
-    },
-    { title: "Филиал", dataIndex: "branch", key: "branch" },
+    // {
+    //   title: "Производственное отделение",
+    //   dataIndex: "prodDept",
+    //   key: "prodDept",
+    // },
+    // { title: "Филиал", dataIndex: "branch", key: "branch" },
     { title: "Объект", dataIndex: "objectN", key: "objectN" },
+    { title: "Адреса", dataIndex: "address", key: "address" },
     { title: "Дисп. центр", dataIndex: "dispCenter", key: "dispCenter" },
     { title: "Статус", dataIndex: "status", key: "status" },
     { title: "Дата/время", dataIndex: "eventDate", key: "eventDate" },
@@ -492,7 +522,13 @@ function SpecialMainContent() {
             current={page}
             total={filteredTnsByField.length}
             pageSize={pageSize}
+            showSizeChanger
+            pageSizeOptions={[10, 25, 50, 100]}
             onChange={setPage}
+            onShowSizeChange={(current, size) => {
+              setPageSize(size);
+              setPage(1);
+            }}
           />
         </div>
       </>
@@ -745,7 +781,13 @@ function SpecialMainContent() {
                     current={page}
                     total={filteredTnsByField.length}
                     pageSize={pageSize}
+                    showSizeChanger
+                    pageSizeOptions={[10, 25, 50, 100]}
                     onChange={setPage}
+                    onShowSizeChange={(current, size) => {
+                      setPageSize(size);
+                      setPage(1);
+                    }}
                   />
                 </div>
               </>
