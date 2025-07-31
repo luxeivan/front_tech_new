@@ -117,6 +117,7 @@ const ME_FIELDS = [
   "need_equipment_count",
   "need_reserve_power_source_count",
   "VIOLATION_GUID_STR",
+  "FIAS_LIST",
 ];
 
 // Маппинг для поля type (цифра в зависимости от типа заявки)
@@ -124,6 +125,19 @@ const TYPE_MAP = {
   "Аварийная заявка": "1",
   "Неплановая заявка": "2",
   "Плановая заявка": "3",
+};
+
+// Преобразует строку из FIAS_LIST в формат, требуемый МинЭнерго
+const buildHouseObjects = (str) => {
+  if (!str || typeof str !== "string") return [];
+  return str
+    .split(/[,;]+/)           // разделители «;» или «,»
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((fias) => ({
+      fias: fias.toLowerCase(), // МинЭнерго принимает нижний регистр
+      count_people: 0,
+    }));
 };
 
 // Функция форматирования даты и времени
@@ -178,27 +192,36 @@ export default function MinEnergoSender({ tn, updateField, open, onClose }) {
   };
 
   // Формируем JSON для отправки
-  const getPayload = () => ({
-    time_create: toDate(draft.F81_060_EVENTDATETIME, true),
-    incident_id: draft.VIOLATION_GUID_STR || tn.VIOLATION_GUID_STR || null,
-    type:
-      TYPE_MAP.hasOwnProperty(draft.VIOLATION_TYPE)
-        ? TYPE_MAP[draft.VIOLATION_TYPE]
-        : null,
-    status:
-      STATUS_NAME_MAP[
-        (draft.STATUS_NAME || "").trim().replace(/^./, (c) => c.toUpperCase())
-      ] || null,
-    plan_date_close: toDate(draft.F81_070_RESTOR_SUPPLAYDATETIME),
-    count_people:
-      draft.POPULATION_COUNT !== "—" ? draft.POPULATION_COUNT : null,
-    fio_response_work: draft.CREATE_USER !== "—" ? draft.CREATE_USER : null,
-    fio_response_phone:
-      draft.fio_response_phone !== "—" ? draft.fio_response_phone : null,
-    description: draft.description !== "—" ? draft.description : null,
-    district_id: DISTRICT_MAP[draft.DISTRICT] || null,
-    resources: [5],
-  });
+  const getPayload = () => {
+    const houseObjects = buildHouseObjects(
+      draft.FIAS_LIST !== "—"
+        ? draft.FIAS_LIST
+        : tn.FIAS_LIST?.value || tn.FIAS_LIST || ""
+    );
+    return {
+      time_create: toDate(draft.F81_060_EVENTDATETIME, true),
+      incident_id: draft.VIOLATION_GUID_STR || tn.VIOLATION_GUID_STR || null,
+      type:
+        TYPE_MAP.hasOwnProperty(draft.VIOLATION_TYPE)
+          ? TYPE_MAP[draft.VIOLATION_TYPE]
+          : null,
+      status:
+        STATUS_NAME_MAP[
+          (draft.STATUS_NAME || "").trim().replace(/^./, (c) => c.toUpperCase())
+        ] || null,
+      plan_date_close: toDate(draft.F81_070_RESTOR_SUPPLAYDATETIME),
+      count_people:
+        draft.POPULATION_COUNT !== "—" ? draft.POPULATION_COUNT : null,
+      fio_response_work: draft.CREATE_USER !== "—" ? draft.CREATE_USER : null,
+      fio_response_phone:
+        draft.fio_response_phone !== "—" ? draft.fio_response_phone : null,
+      description: draft.description !== "—" ? draft.description : null,
+      district_id: DISTRICT_MAP[draft.DISTRICT] || null,
+      resources: [5],
+      house_objects: houseObjects,
+    
+    };
+  };
 
   // Тестировать (вывод в консоль)
   const handleTest = () => {
