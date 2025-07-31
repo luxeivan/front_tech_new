@@ -10,7 +10,10 @@ export const useTnsDataStore = create((set) => ({
   fetchTns: async (token) => {
     set({ loading: true, error: null });
     try {
-      const url = `${process.env.NEXT_PUBLIC_STRAPI_URL}/api/tns?populate=*`;
+      // const url = `${process.env.NEXT_PUBLIC_STRAPI_URL}/api/tns?populate=*`;
+      const url =
+        `${process.env.NEXT_PUBLIC_STRAPI_URL}` +
+        `/api/tns?populate=*&pagination[pageSize]=500`; // или крутись по страницам циклом
       const res = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -40,8 +43,6 @@ export const useTnsDataStore = create((set) => ({
       ),
     })),
 }));
-
-
 
 /**
  * Хук для вычисления списка фильтруемых полей, хранения выбранных значений
