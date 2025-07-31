@@ -344,14 +344,26 @@ export default function MainContent() {
   const { filterableFields, filters, setFilterValue, filteredTns } =
     useTnFilters(filteredTnsByField);
 
+  // Сортируем по дате события (или дате создания) — новые заявки первыми
+  const sortedTnsByField = useMemo(() => {
+    const getTime = (t) => {
+      const d =
+        t.F81_060_EVENTDATETIME?.value ??
+        t.CREATE_DATETIME?.value ??
+        t.createdAt ??
+        0;
+      return dayjs(d).valueOf() || 0;
+    };
+    return [...filteredTnsByField].sort((a, b) => getTime(b) - getTime(a)); // desc
+  }, [filteredTnsByField]);
   // ──────────────── New Pagination State ────────────────
   const [page, setPage] = useState(1);
   const pageSize = 10;
   const paginatedRows = useMemo(() => {
     const start = (page - 1) * pageSize;
     const end = start + pageSize;
-    return filteredTnsByField.slice(start, end);
-  }, [filteredTnsByField, page]);
+    return sortedTnsByField.slice(start, end);
+  }, [sortedTnsByField, page]);
 
   // Сброс страницы при изменении фильтра из url (filterField или minValue)
   useEffect(() => {
@@ -701,9 +713,9 @@ export default function MainContent() {
               rowKey="key"
             />
             <div style={{ marginTop: 20, textAlign: "center" }}>
-              <Pagination
+            <Pagination
                 current={page}
-                total={filteredTnsByField.length}
+                total={sortedTnsByField.length}
                 pageSize={pageSize}
                 onChange={setPage}
               />
