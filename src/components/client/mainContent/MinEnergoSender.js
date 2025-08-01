@@ -145,6 +145,12 @@ const clean = (v) => {
   return String(v);
 };
 
+// Возвращает строку или "0", если данных нет
+const valOrZero = (v) => {
+  if (v === "—" || v === undefined || v === null || v === "") return "0";
+  return String(v);
+};
+
 export default function MinEnergoSender({ tn, updateField, open, onClose }) {
   const { data: session } = useSession();
   const token = session?.user?.jwt;
@@ -228,6 +234,30 @@ export default function MinEnergoSender({ tn, updateField, open, onClose }) {
       ),
     };
 
+    // Блок «Потребности» (Required_forces)
+    const Requiredforces = {
+      Required_brigades: valOrZero(
+        draft.need_brigade_count !== "—"
+          ? draft.need_brigade_count
+          : tn.need_brigade_count?.value
+      ),
+      Required_workers: valOrZero(
+        draft.need_person_count !== "—"
+          ? draft.need_person_count
+          : tn.need_person_count?.value
+      ),
+      Required_equipment: valOrZero(
+        draft.need_equipment_count !== "—"
+          ? draft.need_equipment_count
+          : tn.need_equipment_count?.value
+      ),
+      Required_emergency_power_supply: valOrZero(
+        draft.need_reserve_power_source_count !== "—"
+          ? draft.need_reserve_power_source_count
+          : tn.need_reserve_power_source_count?.value
+      ),
+    };
+
     return {
       time_create: toDate(draft.F81_060_EVENTDATETIME, true),
       incident_id: draft.VIOLATION_GUID_STR || tn.VIOLATION_GUID_STR || null,
@@ -276,6 +306,7 @@ export default function MinEnergoSender({ tn, updateField, open, onClose }) {
       energy_substation: energysubstation,
       transformer_station: transformerstation,
       Involved_forces: Involveforces,
+      Required_forces: Requiredforces,
     };
   };
 
@@ -380,7 +411,13 @@ export default function MinEnergoSender({ tn, updateField, open, onClose }) {
       </Descriptions>
       <Modal
         open={!!editing}
-        title={editing ? tn[editing.field]?.label ?? editing.field : ""}
+        title={
+          editing
+            ? tn[editing.field]?.label ??
+              CUSTOM_LABELS[editing.field] ??
+              editing.field
+            : ""
+        }
         onOk={async () => {
           if (!editing) return;
           const newVal = editing.value?.trim();
