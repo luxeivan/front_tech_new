@@ -7,19 +7,33 @@ export const useTnsDataStore = create((set) => ({
   error: null,
 
   /** Получить список всех ТН */
+  /** Получить список всех ТН (батчами по 100) */
   fetchTns: async (token) => {
     set({ loading: true, error: null });
     try {
-      // const url = `${process.env.NEXT_PUBLIC_STRAPI_URL}/api/tns?populate=*`;
-      const url =
-        `${process.env.NEXT_PUBLIC_STRAPI_URL}` +
-        `/api/tns?populate=*&pagination[pageSize]=500`; // или крутись по страницам циклом
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-      const json = await res.json();
-      set({ tns: json.data || [] });
+      const pageSize = 100; // размер страницы (можно подстроить)
+      let page = 1;
+      let all = [];
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+      while (true) {
+        const url =
+          `${process.env.NEXT_PUBLIC_STRAPI_URL}/api/tns?populate=*` +
+          `&pagination[page]=${page}&pagination[pageSize]=${pageSize}`;
+
+        const res = await fetch(url, { headers });
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+
+        const json = await res.json();
+        const chunk = json.data || [];
+        all = all.concat(chunk);
+
+        // если пришло меньше pageSize, это была последняя страница
+        if (chunk.length < pageSize) break;
+        page += 1;
+      }
+
+      set({ tns: all });
     } catch (e) {
       set({ error: e.message });
     } finally {

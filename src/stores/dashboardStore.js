@@ -21,27 +21,16 @@ import {
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-/**
- * Pure Zustand store for dashboard state.
- * Stores filter, fias cache, coords, and aggregates.
- */
 export const useDashboardStore = create(
   persist(
     (set, get) => ({
-  // --- UI filters ---
   filterField: null,
   minValue: null,
-
-  // --- Dashboard data ---
   filteredTns: [],
   outages: 0,
   metrics: [],
   stats: [],
-
-  // --- Map coordinates ---
   tnCoords: [],
-
-  // --- DaData cache ---
   fiasCache: {},
 
   /* ---------- helpers ---------- */
