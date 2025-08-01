@@ -139,26 +139,11 @@ const buildHouseObjects = (str) => {
     }));
 };
 
-// Функция форматирования даты и времени
-// function formatDateTime(dateTimeStr) {
-//   if (!dateTimeStr || dateTimeStr === "—") return null;
-//   const date = new Date(dateTimeStr);
-//   if (isNaN(date.getTime())) return null;
-//   const pad = (num) => String(num).padStart(2, "0");
-//   return (
-//     date.getFullYear() +
-//     "-" +
-//     pad(date.getMonth() + 1) +
-//     "-" +
-//     pad(date.getDate()) +
-//     " " +
-//     pad(date.getHours()) +
-//     ":" +
-//     pad(date.getMinutes()) +
-//     ":" +
-//     pad(date.getSeconds())
-//   );
-// }
+
+const clean = (v) => {
+  if (v === "—" || v === undefined || v === null || v === "") return null;
+  return String(v);
+};
 
 export default function MinEnergoSender({ tn, updateField, open, onClose }) {
   const { data: session } = useSession();
@@ -199,34 +184,48 @@ export default function MinEnergoSender({ tn, updateField, open, onClose }) {
     );
     // Формируем блок с данными по линиям электропередачи
     const electricLines = {
-      "110kv_count":
-        draft.LINE110_ALL !== "—"
-          ? String(draft.LINE110_ALL)
-          : tn.LINE110_ALL?.value ?? null,
-      "35kv_count":
-        draft.LINE35_ALL !== "—"
-          ? String(draft.LINE35_ALL)
-          : tn.LINE35_ALL?.value ?? null,
-      "6_20kv_count": "1", // дефолтное значение
-      "04kv_count": "Данных нет, будут позже", // временный плейсхолдер
+      "110kv_count": clean(
+        draft.LINE110_ALL !== "—" ? draft.LINE110_ALL : tn.LINE110_ALL?.value
+      ),
+      "35kv_count": clean(
+        draft.LINE35_ALL !== "—" ? draft.LINE35_ALL : tn.LINE35_ALL?.value
+      ),
+      "6_20kv_count": "1", // дефолт
+      "04kv_count": "Данных нет, будут позже",
     };
 
     const energysubstation = {
-      "110kv_count":
-        draft.LINE110_ALL !== "—"
-          ? String(draft.PS110_ALL)
-          : tn.PS110_ALL?.value ?? null,
-      "35kv_count":
-        draft.LINE35_ALL !== "—"
-          ? String(draft.PS35_ALL)
-          : tn.PS35_ALL?.value ?? null,
+      "110kv_count": clean(
+        draft.PS110_ALL !== "—" ? draft.PS110_ALL : tn.PS110_ALL?.value
+      ),
+      "35kv_count": clean(
+        draft.PS35_ALL !== "—" ? draft.PS35_ALL : tn.PS35_ALL?.value
+      ),
     };
 
     const transformerstation = {
-      "6_20kv_count":
-        draft.LINE110_ALL !== "—"
-          ? String(draft.TP_ALL)
-          : tn.TP_ALL?.value ?? null,
+      "6_20kv_count": clean(
+        draft.TP_ALL !== "—" ? draft.TP_ALL : tn.TP_ALL?.value
+      ),
+    };
+
+    const Involveforces = {
+      Involved_brigades: clean(
+        draft.BRIGADECOUNT !== "—" ? draft.BRIGADECOUNT : tn.BRIGADECOUNT?.value
+      ),
+      Involved_workers: clean(
+        draft.EMPLOYEECOUNT !== "—"
+          ? draft.EMPLOYEECOUNT
+          : tn.EMPLOYEECOUNT?.value
+      ),
+      Involved_equipment: clean(
+        draft.SPECIALTECHNIQUECOUNT !== "—"
+          ? draft.SPECIALTECHNIQUECOUNT
+          : tn.SPECIALTECHNIQUECOUNT?.value
+      ),
+      Involved_emergency_power_supply: clean(
+        draft.PES_COUNT !== "—" ? draft.PES_COUNT : tn.PES_COUNT?.value
+      ),
     };
 
     return {
@@ -276,6 +275,7 @@ export default function MinEnergoSender({ tn, updateField, open, onClose }) {
       electric_lines: electricLines,
       energy_substation: energysubstation,
       transformer_station: transformerstation,
+      Involved_forces: Involveforces,
     };
   };
 
