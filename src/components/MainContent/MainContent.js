@@ -33,6 +33,8 @@ import { useSession } from "next-auth/react";
 import SendButtons from "../client/mainContent/SendButtons";
 import AiButton from "../client/mainContent/AiButton";
 import { useTnsDataStore, useTnFilters } from "@/stores/tnsDataStore";
+import { useMainContentStore } from "@/stores/mainContentStore";
+import { useGlobalStore } from "@/stores/globalStore";
 dayjs.locale("ru");
 const { Title } = Typography;
 
@@ -271,8 +273,6 @@ export default function MainContent() {
   const { data: session } = useSession();
   const token = session?.user?.jwt;
   const { tns, loading, error, fetchTns, updateField } = useTnsDataStore();
-  // --- фильтрация по фильтру из searchParams ---
-  // --- фильтрация по фильтру из searchParams ---
   let filteredTnsByField = tns;
   if (filterField) {
     if (filterField === "DISTRICT") {
@@ -296,7 +296,6 @@ export default function MainContent() {
       filteredTnsByField = tns.filter((t) => {
         const field = t[filterField];
         if (!field) return false;
-        // Явно фильтруем только числа (или строки, которые приводятся к числу)
         const val =
           typeof field.value === "string" ? Number(field.value) : field.value;
         if (typeof val !== "number" || isNaN(val)) return false;
@@ -311,20 +310,36 @@ export default function MainContent() {
       );
     }
   }
-  useEffect(() => {
+// ── глобальные флаги ──
+const modalOpen = useGlobalStore((s) => s.modalOpen);
+const setModalOpen = useGlobalStore((s) => s.setModalOpen);
+const refreshInterval = useGlobalStore((s) => s.refreshInterval);
+
+// ── пагинация ──
+const page       = useMainContentStore((s) => s.page);
+const setPage    = useMainContentStore((s) => s.setPage);
+const pageSize   = useMainContentStore((s) => s.pageSize);
+const setPageSize= useMainContentStore((s) => s.setPageSize);
+
+// ── модалка редактирования ──
+const editing       = useMainContentStore((s) => s.editing);
+const editValue     = useMainContentStore((s) => s.editValue);
+const openEditStore = useMainContentStore((s) => s.openEdit);
+const setEditValue  = useMainContentStore((s) => s.setEditValue);
+const closeEdit     = useMainContentStore((s) => s.closeEdit);
+
+useEffect(() => {
     if (token) fetchTns(token);
   }, [token, fetchTns]);
 
   useEffect(() => {
-    if (!token) return;
-    const id = setInterval(() => fetchTns(token), 60_000);
+    if (!token || modalOpen) return; // пауза, если открыта модалка
+    const id = setInterval(() => fetchTns(token), refreshInterval);
     return () => clearInterval(id);
-  }, [token, fetchTns]);
+  }, [token, fetchTns, modalOpen, refreshInterval]);
 
-  // play notification sound when new TN appears
   const prevTnIdsRef = useRef([]);
   useEffect(() => {
-    // skip on initial load
     if (prevTnIdsRef.current.length > 0) {
       const currentIds = tns.map((t) => t.id);
       const newIds = currentIds.filter(
@@ -332,7 +347,6 @@ export default function MainContent() {
       );
       if (newIds.length > 0) {
         const audio = new Audio("/sounds/sound.mp3");
-        // play audio, ignore any playback errors
         audio.play().catch(() => {});
       }
     }
@@ -357,27 +371,24 @@ export default function MainContent() {
     return [...filteredTnsByField].sort((a, b) => getTime(b) - getTime(a)); // desc
   }, [filteredTnsByField]);
   // ──────────────── New Pagination State ────────────────
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);     // page size is now dynamic
+  // const [page, setPage] = useState(1);
+  // const [pageSize, setPageSize] = useState(10);     // page size is now dynamic
   const paginatedRows = useMemo(() => {
     const start = (page - 1) * pageSize;
     return sortedTnsByField.slice(start, start + pageSize);
   }, [sortedTnsByField, page, pageSize]);
+
 
   // Сброс страницы при изменении фильтра из url (filterField или minValue)
   useEffect(() => {
     setPage(1);
   }, [filterField, minValue]);
 
-  // ──────────────────────── 3. DATA ⇢ TABLE ROWS ────────────────────
-  const [editing, setEditing] = useState(null); // редактируемое поле { tnId, docId, fieldKey, label }
-  const [editValue, setEditValue] = useState(""); // значение редактируемого поля
 
   const openEdit = (tnId, docId, fieldKey, label, value) => {
-    setEditing({ tnId, docId, fieldKey, label });
-    setEditValue(value ?? "");
+    openEditStore({ tnId, docId, fieldKey, label, value });
+    setModalOpen(true); // при открытии любой модалки блокируем авто-обновление
   };
-
   const saveEdit = async () => {
     if (!editing) return;
     const { tnId, docId, fieldKey } = editing;
@@ -408,7 +419,8 @@ export default function MainContent() {
       console.error(e);
       message.error("Не удалось сохранить на сервере");
     } finally {
-      setEditing(null);
+      closeEdit();
+      setModalOpen(false);
     }
   };
 
@@ -667,7 +679,6 @@ export default function MainContent() {
           }}
         >
           {filterableFields.map((key) => {
-            // Используем исходный tns для фильтра и выпадающих списков
             const values = Array.from(
               new Set(tns.map((t) => t[key]?.value).filter(Boolean))
             );
@@ -714,17 +725,17 @@ export default function MainContent() {
               rowKey="key"
             />
             <div style={{ marginTop: 20, textAlign: "center" }}>
-            <Pagination
-              current={page}
-              total={sortedTnsByField.length}
-              pageSize={pageSize}
-              showSizeChanger
-              pageSizeOptions={[10, 25, 50, 100]}
-              onChange={(p, ps) => {
-                setPage(p);
-                setPageSize(ps);
-              }}
-            />
+              <Pagination
+                current={page}
+                total={sortedTnsByField.length}
+                pageSize={pageSize}
+                showSizeChanger
+                pageSizeOptions={[10, 25, 50, 100]}
+                onChange={(p, ps) => {
+                  setPage(p);
+                  setPageSize(ps);
+                }}
+              />
             </div>
           </>
         )}
@@ -733,7 +744,10 @@ export default function MainContent() {
         title={editing?.label}
         open={!!editing}
         onOk={saveEdit}
-        onCancel={() => setEditing(null)}
+        onCancel={() => {
+          closeEdit();
+          setModalOpen(false);
+        }}
         okText="Сохранить"
         cancelText="Отмена"
       >

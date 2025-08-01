@@ -4,11 +4,11 @@ import { persist } from "zustand/middleware";
 export const useGlobalStore = create(
   persist(
     (set) => ({
-      refreshIntervalMs: 60_000,
-      setRefreshInterval: (ms) => set({ refreshIntervalMs: ms }),
-
       modalOpen: false,
+      refreshInterval: 60_000,
+
       setModalOpen: (open) => set({ modalOpen: open }),
+      setRefreshInterval: (ms) => set({ refreshInterval: ms }),
     }),
     { name: "global-store" }
   )
