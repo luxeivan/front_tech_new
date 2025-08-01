@@ -210,6 +210,25 @@ export default function MinEnergoSender({ tn, updateField, open, onClose }) {
       "6_20kv_count": "1", // дефолтное значение
       "04kv_count": "Данных нет, будут позже", // временный плейсхолдер
     };
+
+    const energysubstation = {
+      "110kv_count":
+        draft.LINE110_ALL !== "—"
+          ? String(draft.PS110_ALL)
+          : tn.PS110_ALL?.value ?? null,
+      "35kv_count":
+        draft.LINE35_ALL !== "—"
+          ? String(draft.PS35_ALL)
+          : tn.PS35_ALL?.value ?? null,
+    };
+
+    const transformerstation = {
+      "6_20kv_count":
+        draft.LINE110_ALL !== "—"
+          ? String(draft.TP_ALL)
+          : tn.TP_ALL?.value ?? null,
+    };
+
     return {
       time_create: toDate(draft.F81_060_EVENTDATETIME, true),
       incident_id: draft.VIOLATION_GUID_STR || tn.VIOLATION_GUID_STR || null,
@@ -255,6 +274,8 @@ export default function MinEnergoSender({ tn, updateField, open, onClose }) {
         { fias: "Данных нет, будут позже", name: "Данных нет, будут позже" },
       ],
       electric_lines: electricLines,
+      energy_substation: energysubstation,
+      transformer_station: transformerstation,
     };
   };
 
