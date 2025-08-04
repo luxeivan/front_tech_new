@@ -1,6 +1,6 @@
 "use client";
 import { useSearchParams, useRouter } from "next/navigation";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo } from "react";
 import {
   Table,
   Spin,
@@ -8,121 +8,91 @@ import {
   Typography,
   Button,
   Pagination,
-  Select,
   ConfigProvider,
   Space,
   Descriptions,
+  Tabs,
   message,
 } from "antd";
 import ru_RU from "antd/locale/ru_RU";
 import dayjs from "dayjs";
 import "dayjs/locale/ru";
-import {
-  ReloadOutlined,
-  EditOutlined,
-  InfoCircleOutlined,
-  ApartmentOutlined,
-  UserOutlined,
-  FieldNumberOutlined,
-} from "@ant-design/icons";
+import { ReloadOutlined, EditOutlined } from "@ant-design/icons";
 import { useSession } from "next-auth/react";
+
 import AiButton from "../client/mainContent/AiButton";
 import SendPart from "../client/mainContent/sendPart";
 import SaveModal from "../client/global/SaveModal";
+import FilterBar from "./FilterBar";
+
 import { useTnsDataStore, useTnFilters } from "@/stores/tnsDataStore";
 import { useMainContentStore } from "@/stores/mainContentStore";
 import { useGlobalStore } from "@/stores/globalStore";
+
+import useAutoRefresh from "./hooks/useAutoRefresh";
+import useTableData from "./hooks/useTableData";
 import { groupFields } from "./GroupFields";
 import SoInfo from "./SoInfo";
+import { iconMap } from "./constants";
 
 const { Title } = Typography;
 dayjs.locale("ru");
 
-// ─── иконки для Descriptions ──────────────────────────
-const iconMap = {
-  CREATE_USER: <UserOutlined style={{ marginRight: 4 }} />,
-  F81_010_NUMBER: <FieldNumberOutlined style={{ marginRight: 4 }} />,
-  SCNAME: <ApartmentOutlined style={{ marginRight: 4 }} />,
-  OWN_SCNAME: <ApartmentOutlined style={{ marginRight: 4 }} />,
-  STATUS_NAME: <InfoCircleOutlined style={{ marginRight: 4 }} />,
-};
-
 export default function MainContent() {
-  // ───── URL-параметры ────────────────────────────────
-  const searchParams = useSearchParams();
-  const filterField = searchParams.get("filter");
-  const minValue = searchParams.get("min");
+  /* ───── URL params ───── */
+  const q = useSearchParams();
+  const filterField = q.get("filter");
+  const minValue = q.get("min");
 
-  // ───── Auth ─────────────────────────────────────────
+  /* ───── Auth / role ──── */
   const { data: session } = useSession();
   const token = session?.user?.jwt;
+  const role = session?.user?.view_role; // «supergeneral» и т.д.
 
-  // ───── Загрузка данных (Zustand) ────────────────────
-  const { tns, loading, error, fetchTns, updateField } = useTnsDataStore();
-
-  // ───── Глобальный стор ──────────────────────────────
+  /* ───── global store ─── */
   const modalOpen = useGlobalStore((s) => s.modalOpen);
   const setModalOpen = useGlobalStore((s) => s.setModalOpen);
-  const refreshInterval = useGlobalStore((s) => s.refreshInterval);
 
-  // ───── Пагинация (Zustand) ──────────────────────────
+  /* ───── main-store reactive fields ─── */
+  const expandedKeys = useMainContentStore((s) => s.expandedKeys);
+  const setExpandedKeys = useMainContentStore((s) => s.setExpandedKeys);
+
   const page = useMainContentStore((s) => s.page);
   const setPage = useMainContentStore((s) => s.setPage);
   const pageSize = useMainContentStore((s) => s.pageSize);
   const setPageSize = useMainContentStore((s) => s.setPageSize);
 
-  // ───── Модалка редактирования (Zustand) ─────────────
   const editing = useMainContentStore((s) => s.editing);
   const editValue = useMainContentStore((s) => s.editValue);
-  const openEditStore = useMainContentStore((s) => s.openEdit);
+  const openEdit = useMainContentStore((s) => s.openEdit);
   const setEditValue = useMainContentStore((s) => s.setEditValue);
   const closeEdit = useMainContentStore((s) => s.closeEdit);
 
-  // ───── Состояние: какие строки раскрыты ─────────────
-  const [expandedKeys, setExpandedKeys] = useState([]);
+  /* ───── data store ───── */
+  const { tns, loading, error, fetchTns, updateField } = useTnsDataStore();
 
-  // ───── Первичная загрузка ───────────────────────────
+  /* ───── initial fetch + auto-refresh ─ */
   useEffect(() => {
     if (token) fetchTns(token);
   }, [token, fetchTns]);
+  useAutoRefresh({ token, fetchFn: fetchTns, expandedKeys });
 
-  // ───── Авто-обновление (пауза: модалка **или** раскрыта строка) ──
-  useEffect(() => {
-    if (!token || modalOpen || expandedKeys.length) return;
-    const id = setInterval(() => fetchTns(token), refreshInterval);
-    return () => clearInterval(id);
-  }, [token, fetchTns, modalOpen, refreshInterval, expandedKeys]);
-
-  // ───── Звуковое уведомление о новых ТН ───────────────
-  const prevIds = useRef([]);
-  useEffect(() => {
-    if (prevIds.current.length) {
-      const newIds = tns
-        .map((t) => t.id)
-        .filter((id) => !prevIds.current.includes(id));
-      if (newIds.length) new Audio("/sounds/sound.mp3").play().catch(() => {});
-    }
-    prevIds.current = tns.map((t) => t.id);
-  }, [tns]);
-
-  // ───── Фильтрация по URL (filter/min) ────────────────
-  let filteredTnsByField = tns;
+  /* ───── фильтрация URL ─ */
+  let tnsByField = tns;
   if (filterField) {
-    if (filterField === "DISTRICT") {
-      filteredTnsByField = tns.filter((t) => t[filterField]?.value?.trim());
-    } else {
-      const min = minValue !== null ? Number(minValue) : 1;
-      filteredTnsByField = tns.filter(
-        (t) => Number(t[filterField]?.value) >= min
-      );
-    }
+    const min = minValue !== null ? Number(minValue) : 1;
+    tnsByField = tns.filter((t) =>
+      filterField === "DISTRICT"
+        ? t[filterField]?.value?.trim()
+        : Number(t[filterField]?.value) >= min
+    );
   }
 
-  // ───── Селекты-фильтры ──────────────────────────────
+  /* ───── селекты-фильтры ─ */
   const { filterableFields, filters, setFilterValue, filteredTns } =
-    useTnFilters(filteredTnsByField);
+    useTnFilters(tnsByField);
 
-  // ───── Сортировка + пагинация ───────────────────────
+  /* ───── сортировка —— новые вверху ─ */
   const sortedTns = useMemo(() => {
     const getTime = (t) =>
       dayjs(
@@ -133,119 +103,34 @@ export default function MainContent() {
     return [...filteredTns].sort((a, b) => getTime(b) - getTime(a));
   }, [filteredTns]);
 
-  const paginatedRows = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return sortedTns.slice(start, start + pageSize);
-  }, [sortedTns, page, pageSize]);
-
-  // сброс страницы при смене фильтра
-  useEffect(() => setPage(1), [filterField, minValue, filters]);
-
-  // ───── Открыть редактор поля ─────────────────────────
-  const openEdit = (tnId, docId, fieldKey, label, value) => {
-    openEditStore({ tnId, docId, fieldKey, label, value });
-    setModalOpen(true);
-  };
-
-  // ───── Сохранить поле ────────────────────────────────
-  const saveEdit = async () => {
-    if (!editing) return;
-    const { tnId, docId, fieldKey } = editing;
-    const newVal = editValue?.trim();
-    updateField(tnId, fieldKey, newVal);
-    try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_STRAPI_URL}/api/tns/${docId}`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: token ? `Bearer ${token}` : undefined,
-          },
-          body: JSON.stringify({ data: { [fieldKey]: { value: newVal } } }),
+  /* ───── columns + dataSource ─ */
+  const { dataSource, columns, renderDesc } = useTableData({
+    rows: sortedTns,
+    page,
+    pageSize,
+    openEdit: ({ key, v, record }) => (
+      <EditOutlined
+        style={{ marginLeft: 8, cursor: "pointer", color: "#389e0d" }}
+        onClick={() =>
+          openEdit({
+            tnId: record.raw.id,
+            docId: record.raw.documentId,
+            fieldKey: key,
+            label: v.label,
+            value: v.value,
+          })
         }
-      );
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      message.success("Поле обновлено");
-    } catch (e) {
-      console.error(e);
-      message.error("Не удалось сохранить на сервере");
-    } finally {
-      closeEdit();
-      setModalOpen(false);
-    }
-  };
+      />
+    ),
+  });
 
-  // ───── Таблица: данные и колонки ─────────────────────
-  const dataSource = paginatedRows.map((item) => ({
-    key: item.id,
-    raw: item,
-    number: item.F81_010_NUMBER?.value ?? "—",
-    prodDept: item.SCNAME?.value ?? "—",
-    branch: item.OWN_SCNAME?.value ?? "—",
-    objectN: item.F81_041_ENERGOOBJECTNAME?.value ?? "—",
-    address: item.ADDRESS_LIST?.value ?? "—",
-    dispCenter: item.DISPCENTER_NAME_?.value ?? "—",
-    status: item.STATUS_NAME?.value ?? "—",
-    eventDate: item.F81_060_EVENTDATETIME?.value
-      ? dayjs(item.F81_060_EVENTDATETIME.value).format("DD.MM.YYYY HH:mm")
-      : "—",
-  }));
-
-  const columns = [
-    { title: "№ ТН", dataIndex: "number", key: "number" },
-    { title: "Объект", dataIndex: "objectN", key: "objectN" },
-    { title: "Адреса", dataIndex: "address", key: "address" },
-    { title: "Дисп. центр", dataIndex: "dispCenter", key: "dispCenter" },
-    { title: "Статус", dataIndex: "status", key: "status" },
-    { title: "Дата/время", dataIndex: "eventDate", key: "eventDate" },
-  ];
-
-  // ───── Expanded row ─────────────────────────────────
+  /* ───── expanded row ─ */
   const expandedRowRender = (record) => {
     const { main, dateStatus, outageConsumer, resources, others } = groupFields(
       record.raw
     );
 
-    const renderDesc = (fields) =>
-      fields.map(([key, v], idx) => {
-        const zebra = idx % 2 ? "#fafafa" : undefined;
-        const editable = v.edit === "Да";
-        return {
-          key,
-          label: (
-            <>
-              {iconMap[key]}
-              {v.label}
-            </>
-          ),
-          children: (
-            <>
-              {String(
-                typeof v.value === "object" ? JSON.stringify(v.value) : v.value
-              )}
-              {editable && (
-                <EditOutlined
-                  style={{ marginLeft: 8, cursor: "pointer", color: "#389e0d" }}
-                  onClick={() =>
-                    openEdit(
-                      record.raw.id,
-                      record.raw.documentId,
-                      key,
-                      v.label,
-                      v.value
-                    )
-                  }
-                />
-              )}
-            </>
-          ),
-          labelStyle: { background: editable ? "#f6ffed" : zebra },
-          contentStyle: { background: editable ? "#f6ffed" : zebra },
-        };
-      });
-
-    const tabsItems = [
+    const tabs = [
       {
         key: "main",
         label: "Основное",
@@ -318,16 +203,20 @@ export default function MainContent() {
       },
     ];
 
-    return (
-      <SendPart
-        record={record}
-        updateField={updateField}
-        tabsItems={tabsItems}
+    /* hidden SendPart for "supergeneral" */
+    return role === "supergeneral" ? (
+      <Tabs
+        size="small"
+        items={tabs}
+        destroyInactiveTabPane
+        style={{ marginTop: 12 }}
       />
+    ) : (
+      <SendPart record={record} updateField={updateField} tabsItems={tabs} />
     );
   };
 
-  // ───── Render ───────────────────────────────────────
+  /* ───── helpers ─ */
   const router = useRouter();
   const clearFilters = () => {
     filterableFields.forEach((k) => setFilterValue(k, "Все"));
@@ -335,10 +224,11 @@ export default function MainContent() {
     router.replace("/dashboard");
   };
 
+  /* ───── render ─ */
   return (
     <ConfigProvider locale={ru_RU}>
+      {/* ------- HEADER ------- */}
       <div style={{ padding: 20 }}>
-        {/* Заголовок + action-кнопки */}
         <div
           style={{
             marginBottom: 16,
@@ -350,7 +240,7 @@ export default function MainContent() {
           }}
         >
           <Title level={2} style={{ margin: 0 }}>
-            Технологические&nbsp;нарушения
+            Технологические нарушения
           </Title>
           <Space>
             <Button color="green" variant="solid" onClick={clearFilters}>
@@ -370,40 +260,19 @@ export default function MainContent() {
           </Space>
         </div>
 
-        {/* Селекты-фильтры */}
-        <div
-          style={{
-            marginBottom: 16,
-            display: "flex",
-            flexWrap: "wrap",
-            gap: 8,
+        {/* ------- FILTERS ------- */}
+        <FilterBar
+          tns={tns}
+          filterableFields={filterableFields}
+          filters={filters}
+          setFilterValue={setFilterValue}
+          onAfterChange={() => {
+            if (filterField || minValue) router.replace("/dashboard");
+            setPage(1);
           }}
-        >
-          {filterableFields.map((key) => {
-            const values = Array.from(
-              new Set(tns.map((t) => t[key]?.value).filter(Boolean))
-            );
-            const label = tns.find((t) => t[key])?.[key]?.label ?? key;
-            return (
-              <Select
-                key={key}
-                value={filters[key] ?? "Все"}
-                style={{ width: 220 }}
-                onChange={(val) => {
-                  setFilterValue(key, val);
-                  if (filterField || minValue) router.replace("/dashboard");
-                  setPage(1);
-                }}
-                options={[
-                  { value: "Все", label: `${label}: Все` },
-                  ...values.map((v) => ({ value: v, label: v })),
-                ]}
-              />
-            );
-          })}
-        </div>
+        />
 
-        {/* Таблица / спиннер / ошибки */}
+        {/* ------- TABLE / UI ------- */}
         {error && (
           <Alert type="error" message={error} style={{ marginBottom: 16 }} />
         )}
@@ -416,10 +285,10 @@ export default function MainContent() {
             <Table
               columns={columns}
               dataSource={dataSource}
-              pagination={false}
+              rowKey="key"
               bordered
               size="middle"
-              rowKey="key"
+              pagination={false}
               expandable={{
                 expandedRowRender,
                 expandedRowKeys: expandedKeys,
@@ -443,12 +312,21 @@ export default function MainContent() {
         )}
       </div>
 
-      {/* Модалка редактирования */}
+      {/* ------- EDIT MODAL ------- */}
       <SaveModal
         editing={editing}
         editValue={editValue}
         setEditValue={setEditValue}
-        onSave={saveEdit}
+        onSave={async () => {
+          const { tnId, docId, fieldKey } = editing;
+          try {
+            await updateField(tnId, fieldKey, editValue.trim());
+            closeEdit();
+            setModalOpen(false);
+          } catch {
+            message.error("Не удалось сохранить");
+          }
+        }}
         onCancel={() => {
           closeEdit();
           setModalOpen(false);
