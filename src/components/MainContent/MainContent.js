@@ -1,6 +1,6 @@
 "use client";
 import { useSearchParams, useRouter } from "next/navigation";
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Table,
   Spin,
@@ -12,11 +12,7 @@ import {
   ConfigProvider,
   Space,
   Descriptions,
-  Divider,
-  Modal,
-  Input,
   message,
-  Tabs,
 } from "antd";
 import ru_RU from "antd/locale/ru_RU";
 import dayjs from "dayjs";
@@ -30,16 +26,19 @@ import {
   FieldNumberOutlined,
 } from "@ant-design/icons";
 import { useSession } from "next-auth/react";
-import SendButtons from "../client/mainContent/SendButtons";
 import AiButton from "../client/mainContent/AiButton";
+import SendPart from "../client/mainContent/sendPart";
+import SaveModal from "../client/global/SaveModal";
 import { useTnsDataStore, useTnFilters } from "@/stores/tnsDataStore";
 import { useMainContentStore } from "@/stores/mainContentStore";
 import { useGlobalStore } from "@/stores/globalStore";
 import { groupFields } from "./GroupFields";
 import SoInfo from "./SoInfo";
+
 const { Title } = Typography;
 dayjs.locale("ru");
 
+// ─── иконки для Descriptions ──────────────────────────
 const iconMap = {
   CREATE_USER: <UserOutlined style={{ marginRight: 4 }} />,
   F81_010_NUMBER: <FieldNumberOutlined style={{ marginRight: 4 }} />,
@@ -49,130 +48,111 @@ const iconMap = {
 };
 
 export default function MainContent() {
+  // ───── URL-параметры ────────────────────────────────
   const searchParams = useSearchParams();
   const filterField = searchParams.get("filter");
   const minValue = searchParams.get("min");
+
+  // ───── Auth ─────────────────────────────────────────
   const { data: session } = useSession();
   const token = session?.user?.jwt;
+
+  // ───── Загрузка данных (Zustand) ────────────────────
   const { tns, loading, error, fetchTns, updateField } = useTnsDataStore();
-  let filteredTnsByField = tns;
-  if (filterField) {
-    if (filterField === "DISTRICT") {
-      filteredTnsByField = tns.filter((t) => {
-        const field = t[filterField];
-        return (
-          !!field &&
-          typeof field.value === "string" &&
-          field.value.trim() !== ""
-        );
-      });
-      const filteredIds = filteredTnsByField
-        .map((t) => t.documentId)
-        .filter(Boolean);
-      console.log(
-        `[ФИЛЬТР PATCHED] ${filterField} not empty — documentIds:`,
-        filteredIds
-      );
-    } else {
-      const min = minValue !== null ? Number(minValue) : 1;
-      filteredTnsByField = tns.filter((t) => {
-        const field = t[filterField];
-        if (!field) return false;
-        const val =
-          typeof field.value === "string" ? Number(field.value) : field.value;
-        if (typeof val !== "number" || isNaN(val)) return false;
-        return val >= min;
-      });
-      const filteredIds = filteredTnsByField
-        .map((t) => t.documentId)
-        .filter(Boolean);
-      console.log(
-        `[ФИЛЬТР PATCHED] ${filterField} >= ${min} — documentIds:`,
-        filteredIds
-      );
-    }
-  }
-  // ── глобальные флаги ──
+
+  // ───── Глобальный стор ──────────────────────────────
   const modalOpen = useGlobalStore((s) => s.modalOpen);
   const setModalOpen = useGlobalStore((s) => s.setModalOpen);
   const refreshInterval = useGlobalStore((s) => s.refreshInterval);
 
-  // ── пагинация ──
+  // ───── Пагинация (Zustand) ──────────────────────────
   const page = useMainContentStore((s) => s.page);
   const setPage = useMainContentStore((s) => s.setPage);
   const pageSize = useMainContentStore((s) => s.pageSize);
   const setPageSize = useMainContentStore((s) => s.setPageSize);
 
-  // ── модалка редактирования ──
+  // ───── Модалка редактирования (Zustand) ─────────────
   const editing = useMainContentStore((s) => s.editing);
   const editValue = useMainContentStore((s) => s.editValue);
   const openEditStore = useMainContentStore((s) => s.openEdit);
   const setEditValue = useMainContentStore((s) => s.setEditValue);
   const closeEdit = useMainContentStore((s) => s.closeEdit);
 
+  // ───── Состояние: какие строки раскрыты ─────────────
+  const [expandedKeys, setExpandedKeys] = useState([]);
+
+  // ───── Первичная загрузка ───────────────────────────
   useEffect(() => {
     if (token) fetchTns(token);
   }, [token, fetchTns]);
 
+  // ───── Авто-обновление (пауза: модалка **или** раскрыта строка) ──
   useEffect(() => {
-    if (!token || modalOpen) return; // пауза, если открыта модалка
+    if (!token || modalOpen || expandedKeys.length) return;
     const id = setInterval(() => fetchTns(token), refreshInterval);
     return () => clearInterval(id);
-  }, [token, fetchTns, modalOpen, refreshInterval]);
+  }, [token, fetchTns, modalOpen, refreshInterval, expandedKeys]);
 
-  const prevTnIdsRef = useRef([]);
+  // ───── Звуковое уведомление о новых ТН ───────────────
+  const prevIds = useRef([]);
   useEffect(() => {
-    if (prevTnIdsRef.current.length > 0) {
-      const currentIds = tns.map((t) => t.id);
-      const newIds = currentIds.filter(
-        (id) => !prevTnIdsRef.current.includes(id)
-      );
-      if (newIds.length > 0) {
-        const audio = new Audio("/sounds/sound.mp3");
-        audio.play().catch(() => {});
-      }
+    if (prevIds.current.length) {
+      const newIds = tns
+        .map((t) => t.id)
+        .filter((id) => !prevIds.current.includes(id));
+      if (newIds.length) new Audio("/sounds/sound.mp3").play().catch(() => {});
     }
-    // update reference for next comparison
-    prevTnIdsRef.current = tns.map((t) => t.id);
+    prevIds.current = tns.map((t) => t.id);
   }, [tns]);
 
-  // ──────────────────────── 2. Фильтры / Пагинация через хуки ───────
+  // ───── Фильтрация по URL (filter/min) ────────────────
+  let filteredTnsByField = tns;
+  if (filterField) {
+    if (filterField === "DISTRICT") {
+      filteredTnsByField = tns.filter((t) => t[filterField]?.value?.trim());
+    } else {
+      const min = minValue !== null ? Number(minValue) : 1;
+      filteredTnsByField = tns.filter(
+        (t) => Number(t[filterField]?.value) >= min
+      );
+    }
+  }
+
+  // ───── Селекты-фильтры ──────────────────────────────
   const { filterableFields, filters, setFilterValue, filteredTns } =
     useTnFilters(filteredTnsByField);
 
-  // Сортируем по дате события (или дате создания) — новые заявки первыми
-  const sortedTnsByField = useMemo(() => {
-    const getTime = (t) => {
-      const d =
-        t.F81_060_EVENTDATETIME?.value ??
-        t.CREATE_DATETIME?.value ??
-        t.createdAt ??
-        0;
-      return dayjs(d).valueOf() || 0;
-    };
-    return [...filteredTns].sort((a, b) => getTime(b) - getTime(a)); // desc
+  // ───── Сортировка + пагинация ───────────────────────
+  const sortedTns = useMemo(() => {
+    const getTime = (t) =>
+      dayjs(
+        t.F81_060_EVENTDATETIME?.value ||
+          t.CREATE_DATETIME?.value ||
+          t.createdAt
+      ).valueOf() || 0;
+    return [...filteredTns].sort((a, b) => getTime(b) - getTime(a));
   }, [filteredTns]);
+
   const paginatedRows = useMemo(() => {
     const start = (page - 1) * pageSize;
-    return sortedTnsByField.slice(start, start + pageSize);
-  }, [sortedTnsByField, page, pageSize]);
+    return sortedTns.slice(start, start + pageSize);
+  }, [sortedTns, page, pageSize]);
 
-  // Сброс страницы при изменении фильтра из url (filterField или minValue) или filters
-  useEffect(() => {
-    setPage(1);
-  }, [filterField, minValue, filters]);
+  // сброс страницы при смене фильтра
+  useEffect(() => setPage(1), [filterField, minValue, filters]);
 
+  // ───── Открыть редактор поля ─────────────────────────
   const openEdit = (tnId, docId, fieldKey, label, value) => {
     openEditStore({ tnId, docId, fieldKey, label, value });
-    setModalOpen(true); // при открытии любой модалки блокируем авто-обновление
+    setModalOpen(true);
   };
+
+  // ───── Сохранить поле ────────────────────────────────
   const saveEdit = async () => {
     if (!editing) return;
     const { tnId, docId, fieldKey } = editing;
     const newVal = editValue?.trim();
-
     updateField(tnId, fieldKey, newVal);
-
     try {
       const res = await fetch(
         `${process.env.NEXT_PUBLIC_STRAPI_URL}/api/tns/${docId}`,
@@ -180,17 +160,12 @@ export default function MainContent() {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
+            Authorization: token ? `Bearer ${token}` : undefined,
           },
-          body: JSON.stringify({
-            data: { [fieldKey]: { value: newVal } },
-          }),
+          body: JSON.stringify({ data: { [fieldKey]: { value: newVal } } }),
         }
       );
-
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       message.success("Поле обновлено");
     } catch (e) {
       console.error(e);
@@ -201,24 +176,24 @@ export default function MainContent() {
     }
   };
 
+  // ───── Таблица: данные и колонки ─────────────────────
   const dataSource = paginatedRows.map((item) => ({
     key: item.id,
     raw: item,
     number: item.F81_010_NUMBER?.value ?? "—",
-    prodDept: item.SCNAME?.value ?? "—", 
-    branch: item.OWN_SCNAME?.value ?? "—", 
-    objectN: item.F81_041_ENERGOOBJECTNAME?.value ?? "—", 
-    address: item.ADDRESS_LIST?.value ?? "—", 
+    prodDept: item.SCNAME?.value ?? "—",
+    branch: item.OWN_SCNAME?.value ?? "—",
+    objectN: item.F81_041_ENERGOOBJECTNAME?.value ?? "—",
+    address: item.ADDRESS_LIST?.value ?? "—",
     dispCenter: item.DISPCENTER_NAME_?.value ?? "—",
     status: item.STATUS_NAME?.value ?? "—",
     eventDate: item.F81_060_EVENTDATETIME?.value
-      ? dayjs(item.F81_060_EVENTDATETIME.value).format("DD.MM.YYYY HH:mm")
+      ? dayjs(item.F81_060_EVENTDATETIME.value).format("DD.MM.YYYY HH:mm")
       : "—",
   }));
 
-  // ──────────────────────── 4. COLUMNS ──────────────────────────────
   const columns = [
-    { title: "№ ТН", dataIndex: "number", key: "number" },
+    { title: "№ ТН", dataIndex: "number", key: "number" },
     { title: "Объект", dataIndex: "objectN", key: "objectN" },
     { title: "Адреса", dataIndex: "address", key: "address" },
     { title: "Дисп. центр", dataIndex: "dispCenter", key: "dispCenter" },
@@ -226,23 +201,16 @@ export default function MainContent() {
     { title: "Дата/время", dataIndex: "eventDate", key: "eventDate" },
   ];
 
-  const router = useRouter();
-  const clearFilters = () => {
-    filterableFields.forEach((k) => setFilterValue(k, "Все"));
-    setPage(1);
-    router.replace("/dashboard");
-  };
-
+  // ───── Expanded row ─────────────────────────────────
   const expandedRowRender = (record) => {
     const { main, dateStatus, outageConsumer, resources, others } = groupFields(
       record.raw
     );
 
-    const renderDescriptions = (fields) =>
+    const renderDesc = (fields) =>
       fields.map(([key, v], idx) => {
-        const zebraBg = idx % 2 ? "#fafafa" : undefined; // чёт/нечёт
-        const canEdit = v.edit === "Да";
-
+        const zebra = idx % 2 ? "#fafafa" : undefined;
+        const editable = v.edit === "Да";
         return {
           key,
           label: (
@@ -253,44 +221,29 @@ export default function MainContent() {
           ),
           children: (
             <>
-              {typeof v.value === "string" || typeof v.value === "number"
-                ? String(v.value)
-                : JSON.stringify(v.value)}
-              {canEdit && (
+              {String(
+                typeof v.value === "object" ? JSON.stringify(v.value) : v.value
+              )}
+              {editable && (
                 <EditOutlined
                   style={{ marginLeft: 8, cursor: "pointer", color: "#389e0d" }}
-                  onClick={() => {
-                    const docId = record.raw.documentId;
-                    openEdit(record.raw.id, docId, key, v.label, v.value);
-                  }}
+                  onClick={() =>
+                    openEdit(
+                      record.raw.id,
+                      record.raw.documentId,
+                      key,
+                      v.label,
+                      v.value
+                    )
+                  }
                 />
               )}
             </>
           ),
-          // визуальный стиль: зебра + зелёная заливка для редактируемых
-          labelStyle: {
-            background: canEdit ? "#f6ffed" : zebraBg,
-            ...(!canEdit && zebraBg ? { transition: "background 0.3s" } : {}),
-          },
-          contentStyle: {
-            background: canEdit ? "#f6ffed" : zebraBg,
-            ...(!canEdit && zebraBg ? { transition: "background 0.3s" } : {}),
-          },
+          labelStyle: { background: editable ? "#f6ffed" : zebra },
+          contentStyle: { background: editable ? "#f6ffed" : zebra },
         };
       });
-
-    const mainHeaderItems = main.filter(([key]) =>
-      [
-        "F81_010_NUMBER",
-        "VIOLATION_TYPE",
-        "STATUS_NAME",
-        "VIOLATION_GUID_STR",
-        "SCNAME",
-        "OWN_SCNAME",
-        "DISPCENTER_NAME_",
-      ].includes(key)
-    );
-
 
     const tabsItems = [
       {
@@ -301,7 +254,7 @@ export default function MainContent() {
             bordered
             size="small"
             column={2}
-            items={renderDescriptions(main)}
+            items={renderDesc(main)}
             style={{ marginBottom: 12 }}
           />
         ),
@@ -314,7 +267,7 @@ export default function MainContent() {
             bordered
             size="small"
             column={2}
-            items={renderDescriptions(dateStatus)}
+            items={renderDesc(dateStatus)}
             style={{ marginBottom: 12 }}
           />
         ),
@@ -327,7 +280,7 @@ export default function MainContent() {
             bordered
             size="small"
             column={2}
-            items={renderDescriptions(outageConsumer)}
+            items={renderDesc(outageConsumer)}
             style={{ marginBottom: 12 }}
           />
         ),
@@ -340,7 +293,7 @@ export default function MainContent() {
             bordered
             size="small"
             column={2}
-            items={renderDescriptions(resources)}
+            items={renderDesc(resources)}
             style={{ marginBottom: 12 }}
           />
         ),
@@ -358,7 +311,7 @@ export default function MainContent() {
             bordered
             size="small"
             column={2}
-            items={renderDescriptions(others)}
+            items={renderDesc(others)}
             style={{ marginBottom: 12 }}
           />
         ),
@@ -366,49 +319,26 @@ export default function MainContent() {
     ];
 
     return (
-      <>
-        {/* кнопки отправки */}
-        <div
-          style={{
-            background: "#fff",
-            borderRadius: 10,
-            boxShadow: "0 2px 16px rgba(0,0,0,0.08)",
-            padding: 16,
-            marginBottom: 20,
-            border: "1px solid #f0f0f0",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "flex-start",
-            gap: 16,
-          }}
-        >
-          <div style={{ fontWeight: 500, marginRight: 16 }}>
-            Отправка данных:
-          </div>
-          <SendButtons
-            tn={record.raw}
-            onFieldChange={(patch) => {
-              Object.entries(patch).forEach(([k, v]) =>
-                updateField(record.raw.id, k, v)
-              );
-            }}
-          />
-        </div>
-
-        <Tabs
-          size="small"
-          items={tabsItems}
-          destroyInactiveTabPane
-          style={{ marginTop: 12 }}
-        />
-      </>
+      <SendPart
+        record={record}
+        updateField={updateField}
+        tabsItems={tabsItems}
+      />
     );
   };
 
-  // ──────────────────────── 6. RENDER ───────────────────────────────
+  // ───── Render ───────────────────────────────────────
+  const router = useRouter();
+  const clearFilters = () => {
+    filterableFields.forEach((k) => setFilterValue(k, "Все"));
+    setPage(1);
+    router.replace("/dashboard");
+  };
+
   return (
     <ConfigProvider locale={ru_RU}>
       <div style={{ padding: 20 }}>
+        {/* Заголовок + action-кнопки */}
         <div
           style={{
             marginBottom: 16,
@@ -422,7 +352,6 @@ export default function MainContent() {
           <Title level={2} style={{ margin: 0 }}>
             Технологические&nbsp;нарушения
           </Title>
-
           <Space>
             <Button color="green" variant="solid" onClick={clearFilters}>
               Дашборд
@@ -440,6 +369,8 @@ export default function MainContent() {
             <AiButton />
           </Space>
         </div>
+
+        {/* Селекты-фильтры */}
         <div
           style={{
             marginBottom: 16,
@@ -460,10 +391,7 @@ export default function MainContent() {
                 style={{ width: 220 }}
                 onChange={(val) => {
                   setFilterValue(key, val);
-                  // Если был активен url-фильтр, сбрасываем url и пагинацию
-                  if (filterField || minValue) {
-                    router.replace("/dashboard");
-                  }
+                  if (filterField || minValue) router.replace("/dashboard");
                   setPage(1);
                 }}
                 options={[
@@ -475,10 +403,10 @@ export default function MainContent() {
           })}
         </div>
 
+        {/* Таблица / спиннер / ошибки */}
         {error && (
           <Alert type="error" message={error} style={{ marginBottom: 16 }} />
         )}
-
         {loading ? (
           <div style={{ textAlign: "center", marginTop: 50 }}>
             <Spin size="large" />
@@ -491,13 +419,17 @@ export default function MainContent() {
               pagination={false}
               bordered
               size="middle"
-              expandable={{ expandedRowRender }}
               rowKey="key"
+              expandable={{
+                expandedRowRender,
+                expandedRowKeys: expandedKeys,
+                onExpandedRowsChange: setExpandedKeys,
+              }}
             />
             <div style={{ marginTop: 20, textAlign: "center" }}>
               <Pagination
                 current={page}
-                total={sortedTnsByField.length}
+                total={sortedTns.length}
                 pageSize={pageSize}
                 showSizeChanger
                 pageSizeOptions={[10, 25, 50, 100]}
@@ -510,23 +442,18 @@ export default function MainContent() {
           </>
         )}
       </div>
-      <Modal
-        title={editing?.label}
-        open={!!editing}
-        onOk={saveEdit}
+
+      {/* Модалка редактирования */}
+      <SaveModal
+        editing={editing}
+        editValue={editValue}
+        setEditValue={setEditValue}
+        onSave={saveEdit}
         onCancel={() => {
           closeEdit();
           setModalOpen(false);
         }}
-        okText="Сохранить"
-        cancelText="Отмена"
-      >
-        <Input
-          value={editValue}
-          onChange={(e) => setEditValue(e.target.value)}
-          autoFocus
-        />
-      </Modal>
+      />
     </ConfigProvider>
   );
 }

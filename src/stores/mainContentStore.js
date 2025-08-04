@@ -1,7 +1,3 @@
-/**
- * Стор для <MainContent />.
- * Держим локальные «UI-состояния», чтобы сам компонент стал чище.
- */
 import { create } from "zustand";
 
 export const useMainContentStore = create((set) => ({
