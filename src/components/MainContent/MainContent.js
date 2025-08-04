@@ -1,6 +1,6 @@
 "use client";
-import { useSearchParams } from "next/navigation";
-import React, { useEffect, useState, useMemo, useRef } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import React, { useEffect, useMemo, useRef } from "react";
 import {
   Table,
   Spin,
@@ -35,8 +35,10 @@ import AiButton from "../client/mainContent/AiButton";
 import { useTnsDataStore, useTnFilters } from "@/stores/tnsDataStore";
 import { useMainContentStore } from "@/stores/mainContentStore";
 import { useGlobalStore } from "@/stores/globalStore";
-dayjs.locale("ru");
+import { groupFields } from "./GroupFields";
+import SoInfo from "./SoInfo";
 const { Title } = Typography;
+dayjs.locale("ru");
 
 const iconMap = {
   CREATE_USER: <UserOutlined style={{ marginRight: 4 }} />,
@@ -46,227 +48,7 @@ const iconMap = {
   STATUS_NAME: <InfoCircleOutlined style={{ marginRight: 4 }} />,
 };
 
-const SoInfo = ({ tnId, docId }) => {
-  const [docIds, setDocIds] = React.useState(null);
-  const [details, setDetails] = React.useState({});
-  const { data: session } = useSession();
-  const token = session?.user?.jwt;
-
-  React.useEffect(() => {
-    let cancelled = false;
-
-    (async () => {
-      try {
-        const res = await fetch(
-          `${process.env.NEXT_PUBLIC_STRAPI_URL}/api/tns/${docId}?populate[SocialObjects][populate]=*`,
-          { headers: { Authorization: token ? `Bearer ${token}` : undefined } }
-        );
-        const json = await res.json();
-        const list = Array.isArray(json?.data?.SocialObjects)
-          ? json.data.SocialObjects.flatMap((c) =>
-              Array.isArray(c.SocialObjects)
-                ? c.SocialObjects.map((o) => o.documentId).filter(Boolean)
-                : []
-            )
-          : [];
-
-        if (!cancelled) {
-          setDocIds(list);
-          console.log(
-            `Соц объекты для ТН ${tnId}:`,
-            list.length ? `${list.length} → ${list.join(", ")}` : "нет"
-          );
-        }
-      } catch (e) {
-        console.error("Ошибка загрузки соц‑объектов (список)", e);
-      }
-      return () => {
-        cancelled = true;
-      };
-    })();
-  }, [tnId, docId, token]);
-
-  React.useEffect(() => {
-    if (!docIds) return;
-    docIds.forEach(async (id) => {
-      if (details[id] !== undefined) return;
-
-      setDetails((p) => ({ ...p, [id]: null }));
-
-      try {
-        const url =
-          `${process.env.NEXT_PUBLIC_STRAPI_URL}` +
-          `/api/soczialnye-obekties?filters[documentId][$eq]=${id}&populate=*`;
-        const res = await fetch(url, {
-          headers: { Authorization: token ? `Bearer ${token}` : undefined },
-        });
-        const json = await res.json();
-        const so = json?.data?.[0] ?? undefined;
-
-        setDetails((p) => ({ ...p, [id]: so }));
-      } catch (e) {
-        console.error("Ошибка загрузки соц‑объекта", id, e);
-        setDetails((p) => ({ ...p, [id]: undefined }));
-      }
-    });
-  }, [docIds, details, token]);
-
-  if (!docIds || docIds.length === 0) return null;
-
-  // ─── UI ───
-  return (
-    <>
-      <Divider orientation="left" style={{ marginTop: 12 }}>
-        Соц&nbsp;объекты ({docIds.length})
-      </Divider>
-
-      {docIds.map((id) => {
-        const so = details[id];
-        if (so === null)
-          return (
-            <div key={id} style={{ marginBottom: 8 }}>
-              {id} &nbsp;— загрузка…
-            </div>
-          );
-        if (so === undefined)
-          return (
-            <div key={id} style={{ marginBottom: 8, color: "#c41d7f" }}>
-              {id} &nbsp;— не найден
-            </div>
-          );
-
-        const fields = Object.entries(so).filter(
-          ([, v]) => v && typeof v === "object" && "label" in v && v.value
-        );
-
-        return (
-          <Descriptions
-            key={id}
-            size="small"
-            bordered
-            column={2}
-            title={so.Name?.value || id}
-            style={{ marginBottom: 12 }}
-            items={fields.map(([k, v]) => ({
-              key: k,
-              label: v.label,
-              children: String(v.value),
-            }))}
-          />
-        );
-      })}
-    </>
-  );
-};
-
-function groupFields(record) {
-  const fields = Object.entries(record).filter(
-    ([key, v]) =>
-      // пропускаем “тех‑поля”, которые не должны отображаться
-      !["OBJECTNAMEKEY", "SWITCHNAMEKEY", "PVS_RP116_10BR_F20"].includes(key) &&
-      v &&
-      typeof v === "object" &&
-      "label" in v &&
-      v.value !== undefined &&
-      v.value !== null &&
-      v.value !== ""
-  );
-
-  const mainKeys = new Set([
-    "CREATE_USER",
-    "fio_response_phone",
-    "description",
-    "F81_010_NUMBER",
-    "VIOLATION_TYPE",
-    "STATUS_NAME",
-    "VIOLATION_GUID_STR",
-    "SCNAME",
-    "OWN_SCNAME",
-    "DISPCENTER_NAME_",
-  ]);
-  const dateStatusKeys = new Set([
-    "F81_060_EVENTDATETIME",
-    "F81_070_RESTOR_SUPPLAYDATETIME",
-    "CREATE_DATETIME",
-    "F81_290_RECOVERYDATETIME",
-  ]);
-
-  // For "Отключения и потребители": keys containing "ALL" or "COUNT"
-  // For "Потребности и ресурсы": explicit keys plus those containing need_ or _count
-
-  const outageConsumerKeys = [];
-  const resourceKeys = [];
-
-  // Explicit keys for resources as per instruction
-  const explicitResourceKeys = new Set([
-    "BRIGADECOUNT",
-    "EMPLOYEECOUNT",
-    "SPECIALTECHNIQUECOUNT",
-    "PES_COUNT",
-    "need_brigade_count",
-    "need_person_count",
-    "need_equipment_count",
-    "need_reserve_power_source_count",
-  ]);
-
-  // Prepare groups
-  const main = [];
-  const dateStatus = [];
-  const outageConsumer = [];
-  const resources = [];
-  const others = [];
-
-  fields.forEach(([key, v]) => {
-    const val = v.value;
-    const canEdit = v.edit === "Да";
-
-    if (mainKeys.has(key)) {
-      main.push([key, v]);
-    } else if (dateStatusKeys.has(key)) {
-      dateStatus.push([key, v]);
-    } else if (key.includes("ALL") || key.includes("COUNT")) {
-      // Check if explicit resource key or resource-like key
-      if (
-        explicitResourceKeys.has(key) ||
-        key.toLowerCase().includes("need_") ||
-        key.toLowerCase().includes("_count")
-      ) {
-        resources.push([key, v]);
-      } else {
-        outageConsumer.push([key, v]);
-      }
-    } else if (
-      explicitResourceKeys.has(key) ||
-      key.toLowerCase().includes("need_") ||
-      key.toLowerCase().includes("_count")
-    ) {
-      resources.push([key, v]);
-    } else {
-      others.push([key, v]);
-    }
-  });
-
-  // Sort each group alphabetically by key
-  const sortByKey = (arr) => arr.sort((a, b) => a[0].localeCompare(b[0]));
-  sortByKey(main);
-  sortByKey(dateStatus);
-  sortByKey(outageConsumer);
-  sortByKey(resources);
-  sortByKey(others);
-
-  return {
-    main,
-    dateStatus,
-    outageConsumer,
-    resources,
-    others,
-  };
-}
-
-import { useRouter } from "next/navigation";
-
 export default function MainContent() {
-  // ──────────────────────── 1. AUTH & STORE ────────────────────────
   const searchParams = useSearchParams();
   const filterField = searchParams.get("filter");
   const minValue = searchParams.get("min");
@@ -310,25 +92,25 @@ export default function MainContent() {
       );
     }
   }
-// ── глобальные флаги ──
-const modalOpen = useGlobalStore((s) => s.modalOpen);
-const setModalOpen = useGlobalStore((s) => s.setModalOpen);
-const refreshInterval = useGlobalStore((s) => s.refreshInterval);
+  // ── глобальные флаги ──
+  const modalOpen = useGlobalStore((s) => s.modalOpen);
+  const setModalOpen = useGlobalStore((s) => s.setModalOpen);
+  const refreshInterval = useGlobalStore((s) => s.refreshInterval);
 
-// ── пагинация ──
-const page       = useMainContentStore((s) => s.page);
-const setPage    = useMainContentStore((s) => s.setPage);
-const pageSize   = useMainContentStore((s) => s.pageSize);
-const setPageSize= useMainContentStore((s) => s.setPageSize);
+  // ── пагинация ──
+  const page = useMainContentStore((s) => s.page);
+  const setPage = useMainContentStore((s) => s.setPage);
+  const pageSize = useMainContentStore((s) => s.pageSize);
+  const setPageSize = useMainContentStore((s) => s.setPageSize);
 
-// ── модалка редактирования ──
-const editing       = useMainContentStore((s) => s.editing);
-const editValue     = useMainContentStore((s) => s.editValue);
-const openEditStore = useMainContentStore((s) => s.openEdit);
-const setEditValue  = useMainContentStore((s) => s.setEditValue);
-const closeEdit     = useMainContentStore((s) => s.closeEdit);
+  // ── модалка редактирования ──
+  const editing = useMainContentStore((s) => s.editing);
+  const editValue = useMainContentStore((s) => s.editValue);
+  const openEditStore = useMainContentStore((s) => s.openEdit);
+  const setEditValue = useMainContentStore((s) => s.setEditValue);
+  const closeEdit = useMainContentStore((s) => s.closeEdit);
 
-useEffect(() => {
+  useEffect(() => {
     if (token) fetchTns(token);
   }, [token, fetchTns]);
 
@@ -370,20 +152,15 @@ useEffect(() => {
     };
     return [...filteredTnsByField].sort((a, b) => getTime(b) - getTime(a)); // desc
   }, [filteredTnsByField]);
-  // ──────────────── New Pagination State ────────────────
-  // const [page, setPage] = useState(1);
-  // const [pageSize, setPageSize] = useState(10);     // page size is now dynamic
   const paginatedRows = useMemo(() => {
     const start = (page - 1) * pageSize;
     return sortedTnsByField.slice(start, start + pageSize);
   }, [sortedTnsByField, page, pageSize]);
 
-
   // Сброс страницы при изменении фильтра из url (filterField или minValue)
   useEffect(() => {
     setPage(1);
   }, [filterField, minValue]);
-
 
   const openEdit = (tnId, docId, fieldKey, label, value) => {
     openEditStore({ tnId, docId, fieldKey, label, value });
@@ -428,11 +205,11 @@ useEffect(() => {
     key: item.id,
     raw: item,
     number: item.F81_010_NUMBER?.value ?? "—",
-    prodDept: item.SCNAME?.value ?? "—", // Производственное отделение
-    branch: item.OWN_SCNAME?.value ?? "—", // Филиал
-    objectN: item.F81_041_ENERGOOBJECTNAME?.value ?? "—", // Объект
-    address: item.ADDRESS_LIST?.value ?? "—", // Адреса
-    dispCenter: item.DISPCENTER_NAME_?.value ?? "—", // Дисп. центр
+    prodDept: item.SCNAME?.value ?? "—", 
+    branch: item.OWN_SCNAME?.value ?? "—", 
+    objectN: item.F81_041_ENERGOOBJECTNAME?.value ?? "—", 
+    address: item.ADDRESS_LIST?.value ?? "—", 
+    dispCenter: item.DISPCENTER_NAME_?.value ?? "—",
     status: item.STATUS_NAME?.value ?? "—",
     eventDate: item.F81_060_EVENTDATETIME?.value
       ? dayjs(item.F81_060_EVENTDATETIME.value).format("DD.MM.YYYY HH:mm")
@@ -442,12 +219,6 @@ useEffect(() => {
   // ──────────────────────── 4. COLUMNS ──────────────────────────────
   const columns = [
     { title: "№ ТН", dataIndex: "number", key: "number" },
-    // {
-    //   title: "Производственное отделение",
-    //   dataIndex: "prodDept",
-    //   key: "prodDept",
-    // },
-    // { title: "Филиал", dataIndex: "branch", key: "branch" },
     { title: "Объект", dataIndex: "objectN", key: "objectN" },
     { title: "Адреса", dataIndex: "address", key: "address" },
     { title: "Дисп. центр", dataIndex: "dispCenter", key: "dispCenter" },
@@ -508,7 +279,6 @@ useEffect(() => {
         };
       });
 
-    // Prepare main tab header with key fields in a Descriptions
     const mainHeaderItems = main.filter(([key]) =>
       [
         "F81_010_NUMBER",
@@ -521,7 +291,7 @@ useEffect(() => {
       ].includes(key)
     );
 
-    // Render Descriptions for each tab
+
     const tabsItems = [
       {
         key: "main",
