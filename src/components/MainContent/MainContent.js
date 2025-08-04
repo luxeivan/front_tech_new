@@ -150,17 +150,17 @@ export default function MainContent() {
         0;
       return dayjs(d).valueOf() || 0;
     };
-    return [...filteredTnsByField].sort((a, b) => getTime(b) - getTime(a)); // desc
-  }, [filteredTnsByField]);
+    return [...filteredTns].sort((a, b) => getTime(b) - getTime(a)); // desc
+  }, [filteredTns]);
   const paginatedRows = useMemo(() => {
     const start = (page - 1) * pageSize;
     return sortedTnsByField.slice(start, start + pageSize);
   }, [sortedTnsByField, page, pageSize]);
 
-  // Сброс страницы при изменении фильтра из url (filterField или minValue)
+  // Сброс страницы при изменении фильтра из url (filterField или minValue) или filters
   useEffect(() => {
     setPage(1);
-  }, [filterField, minValue]);
+  }, [filterField, minValue, filters]);
 
   const openEdit = (tnId, docId, fieldKey, label, value) => {
     openEditStore({ tnId, docId, fieldKey, label, value });
