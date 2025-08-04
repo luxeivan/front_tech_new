@@ -188,17 +188,26 @@ export const useDashboardStore = create(
   },
 
   applyFilter(field = null, min = null, allTns = []) {
-    let filtered = allTns;
+    // ――― отбираем только «открытые» ТН ―――
+    const openTns = allTns.filter((i) => {
+      const status =
+        typeof i.STATUS_NAME === "object"
+          ? i.STATUS_NAME?.value
+          : i.STATUS_NAME;
+      return (status || "").trim().toLowerCase() === "открыта";
+    });
+    let base = openTns;            // дальше работаем только с открытыми
+    let filtered = base;
 
     if (field) {
       if (field === "DISTRICT") {
-        filtered = allTns.filter((i) => {
+        filtered = base.filter((i) => {
           const v =
             typeof i.DISTRICT === "string" ? i.DISTRICT : i.DISTRICT?.value || "";
           return !!v && v.trim() !== "" && v.trim() !== "—";
         });
       } else if (min !== null && !isNaN(min)) {
-        filtered = allTns.filter((i) => {
+        filtered = base.filter((i) => {
           const v = i[field]?.value;
           const n = Number(v);
           return !isNaN(n) && n >= min;
@@ -212,76 +221,8 @@ export const useDashboardStore = create(
 
   /* ---------- coords / DaData ---------- */
   async loadCoordsFromTns(tns) {
-    if (!Array.isArray(tns) || !tns.length) return;
-
-    const allFias = [];
-    tns.forEach((item) => {
-      let arr = [];
-      if (
-        item.FIAS_LIST &&
-        typeof item.FIAS_LIST === "object" &&
-        typeof item.FIAS_LIST.value === "string"
-      ) {
-        arr = item.FIAS_LIST.value.split(";").map((s) => s.trim()).filter(Boolean);
-      } else if (typeof item.FIAS_LIST === "string" && item.FIAS_LIST.trim()) {
-        arr = item.FIAS_LIST.split(";").map((s) => s.trim()).filter(Boolean);
-      }
-      arr.forEach((f) => {
-        if (f && !allFias.includes(f)) allFias.push(f);
-      });
-    });
-
-    const cache = { ...get().fiasCache };
-    const chunk = 5;
-    for (let i = 0; i < allFias.length; i += chunk) {
-      await Promise.all(
-        allFias.slice(i, i + chunk).map(async (fias) => {
-          if (cache[fias]) return;
-          try {
-            const resp = await fetch(
-              `/api/dadata?query=${encodeURIComponent(fias)}&mode=findById`
-            );
-            if (!resp.ok) return;
-            const j = await resp.json();
-            const s =
-              Array.isArray(j) ? j[0] : Array.isArray(j?.suggestions) ? j.suggestions[0] : null;
-            if (!s) return;
-            cache[fias] = {
-              addr: s.unrestricted_value || s.value || null,
-              lat: s.data?.geo_lat || s.geo_lat || null,
-              lon: s.data?.geo_lon || s.geo_lon || null,
-            };
-          } catch {}
-        })
-      );
-    }
-
-    const coords = [];
-    tns.forEach((item, idx) => {
-      let arr = [];
-      if (
-        item.FIAS_LIST &&
-        typeof item.FIAS_LIST === "object" &&
-        typeof item.FIAS_LIST.value === "string"
-      ) {
-        arr = item.FIAS_LIST.value.split(";").map((s) => s.trim()).filter(Boolean);
-      } else if (typeof item.FIAS_LIST === "string" && item.FIAS_LIST.trim()) {
-        arr = item.FIAS_LIST.split(";").map((s) => s.trim()).filter(Boolean);
-      }
-      arr.forEach((f) => {
-        const c = cache[f];
-        if (c && c.lat && c.lon) {
-          coords.push({
-            id: `${idx}_${f}`,
-            coords: [Number(c.lat), Number(c.lon)],
-            label: item.NAME?.value || "",
-            balloonContent: c.addr,
-          });
-        }
-      });
-    });
-
-    set({ tnCoords: coords, fiasCache: cache });
+    // Координаты и DaData временно отключены
+    return;
   },
     }),
     {

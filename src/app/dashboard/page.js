@@ -384,7 +384,7 @@ function Dashboard() {
           </Row>
 
           {/* Карта (на всю ширину) */}
-          <div
+          {/* <div
             style={{
               width: "100%",
               borderRadius: 18,
@@ -408,7 +408,6 @@ function Dashboard() {
                 }}
                 modules={["control.ZoomControl"]}
               >
-                {/* --- Здесь отображаем Placemark для каждой tnCoords с popup/label --- */}
                 {tnCoords.map((p) =>
                   p.coords ? (
                     <Placemark
@@ -428,7 +427,7 @@ function Dashboard() {
                 )}
               </Map>
             </YMaps>
-          </div>
+          </div> */}
 
           {/* Задействовано сил и средств */}
           <Card
