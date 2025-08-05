@@ -202,7 +202,7 @@ const MainMetricCard = ({ value, onClick }) => {
 function Dashboard() {
   const tns = useTnsDataStore((state) => state.tns);
   const loading = useTnsDataStore((state) => state.loading);
-  const fetchTns = useTnsDataStore((state) => state.fetchTns);
+  const fetchTns = useTnsDataStore((state) => state.fetchTnsFast);
   const { data: session } = useSession();
   const token = session?.user?.jwt;
 
