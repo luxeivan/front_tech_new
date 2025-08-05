@@ -1,11 +1,10 @@
 /**************************************************************************
- *  src/app/dashboardtest/page.js
- *  – витрина «уникальных открытых» с реальными цифрами из Strapi
+ *  src/app/dashboardtest/page.js   (UI-refresh — подчёркнутые карточки)
  **************************************************************************/
 
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Typography,
   Row,
@@ -15,6 +14,7 @@ import {
   Spin,
   Button,
   Space,
+  Skeleton,
 } from "antd";
 import {
   ThunderboltOutlined,
@@ -37,16 +37,12 @@ import {
 import { useSession } from "next-auth/react";
 import { useDashboardTestStore } from "@/stores/dashboardTestStore";
 
-const { Text, Title } = Typography;
+const { Title, Text } = Typography;
 
-/* ---------- utils --------------------------------------------------- */
-const asNum = (v) => {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
-};
-const getNum = (item, field) => asNum(item?.[field]?.value ?? item?.[field]);
+/* -------- helpers -------- */
+const n = (v) => (Number.isFinite(+v) ? +v : 0);
+const f = (o, k) => n(o?.[k]?.value ?? o?.[k]);
 
-/* ---------- what we show & where брать ----------------------------- */
 const metricDefs = [
   {
     icon: <ThunderboltOutlined />,
@@ -63,8 +59,8 @@ const metricDefs = [
   {
     icon: <HomeOutlined />,
     title: "Населённых пунктов",
-    custom: (tns) =>
-      new Set(tns.map((i) => i.DISTRICT?.value ?? i.DISTRICT).filter(Boolean))
+    custom: (arr) =>
+      new Set(arr.map((i) => i.DISTRICT?.value ?? i.DISTRICT).filter(Boolean))
         .size,
     color: "#1890ff",
   },
@@ -159,7 +155,7 @@ const statDefs = [
   },
 ];
 
-/* ---------- component ---------------------------------------------- */
+/* ---------- component ---------- */
 export default function DashboardTest() {
   const { data: session, status } = useSession();
   const token = session?.user?.jwt ?? null;
@@ -170,7 +166,6 @@ export default function DashboardTest() {
     if (status === "authenticated") loadUnique(token);
   }, [status, token, loadUnique]);
 
-  /* ---------- aggregated metrics / stats ---------- */
   const metrics = useMemo(() => {
     if (!uniqueOpen?.length) return [];
     return metricDefs.map((m) => ({
@@ -178,7 +173,7 @@ export default function DashboardTest() {
       value:
         typeof m.custom === "function"
           ? m.custom(uniqueOpen)
-          : uniqueOpen.reduce((s, i) => s + getNum(i, m.field), 0),
+          : uniqueOpen.reduce((s, i) => s + f(i, m.field), 0),
     }));
   }, [uniqueOpen]);
 
@@ -186,57 +181,60 @@ export default function DashboardTest() {
     if (!uniqueOpen?.length) return [];
     return statDefs.map((s) => ({
       ...s,
-      value: uniqueOpen.reduce((sum, i) => sum + getNum(i, s.field), 0),
+      value: uniqueOpen.reduce((sum, i) => sum + f(i, s.field), 0),
     }));
   }, [uniqueOpen]);
 
-  const currentDateTime = useMemo(
-    () =>
+  /* client-only time (гидрация ок) */
+  const [now, setNow] = useState(null);
+  useEffect(() => {
+    setNow(
       new Intl.DateTimeFormat("ru-RU", {
         timeZone: "Europe/Moscow",
         dateStyle: "short",
         timeStyle: "medium",
-      }).format(new Date()),
-    []
-  );
+      }).format(new Date())
+    );
+  }, []);
 
-  /* ---------------- UI --------------------------------------------- */
+  /* ---------- UI ---------- */
   return (
     <div style={{ padding: 24, maxWidth: 1400, margin: "0 auto" }}>
       <Title
         level={2}
-        style={{
-          textAlign: "center",
-          color: "#1575bc",
-          fontWeight: 700,
-          letterSpacing: 0.5,
-          marginBottom: 8,
-          userSelect: "none",
-        }}
+        style={{ textAlign: "center", color: "#1575bc", fontWeight: 700 }}
       >
         ТЕХНОЛОГИЧЕСКИЕ НАРУШЕНИЯ В ЭЛЕКТРИЧЕСКИХ СЕТЯХ АО «МОСОБЛЭНЕРГО»
       </Title>
-      <Text
-        style={{
-          display: "block",
-          textAlign: "center",
-          fontWeight: 600,
-          fontSize: 18,
-          color: "#1575bc",
-          marginBottom: 40,
-          userSelect: "none",
-          letterSpacing: 0.5,
-        }}
-      >
-        По состоянию на {currentDateTime}
-      </Text>
-
-      {isLoading && !error && (
-        <Space style={{ width: "100%", justifyContent: "center" }}>
-          <Spin size="large" />
-        </Space>
+      {now ? (
+        <Text
+          style={{
+            display: "block",
+            textAlign: "center",
+            fontWeight: 600,
+            fontSize: 20,
+            color: "#1575bc",
+            marginBottom: 48,
+          }}
+        >
+          По состоянию на {now}
+        </Text>
+      ) : (
+        <Skeleton
+          paragraph={false}
+          active
+          style={{ width: 260, margin: "0 auto 48px" }}
+        />
       )}
 
+      {/* loader / error */}
+      {isLoading && !error && (
+        <Space
+          style={{ width: "100%", justifyContent: "center", marginTop: 80 }}
+        >
+          <Spin size="large" tip="Загружаем данные…" />
+        </Space>
+      )}
       {error && (
         <Title level={4} type="danger" style={{ textAlign: "center" }}>
           {error}
@@ -245,33 +243,38 @@ export default function DashboardTest() {
 
       {!isLoading && !error && uniqueOpen && (
         <>
-          {/* ----- Top cards ----- */}
+          {/* big card row */}
           <Row gutter={[24, 24]} justify="center">
-            {/* «Всего» */}
-            <Col xs={24} sm={12} md={10} lg={8}>
+            <Col xs={24} sm={24} md={12}>
               <Card
-                bordered={false}
+                variant="filled"
                 style={{
-                  borderRadius: 16,
-                  background: "#e6f4ff",
+                  borderRadius: 20,
+                  background: "#e9f4ff",
                   textAlign: "center",
                 }}
-                bodyStyle={{ padding: 24 }}
+                styles={{ body: { padding: 40 } }}
               >
                 <Statistic
-                  title={<Text strong>Всего</Text>}
+                  title={
+                    <Text strong style={{ fontSize: 20 }}>
+                      Всего
+                    </Text>
+                  }
                   value={uniqueOpen.length}
                   valueStyle={{
-                    fontSize: 48,
+                    fontSize: 72,
                     color: "#1575bc",
                     fontWeight: 700,
                   }}
-                  suffix="ТН"
+                  suffix={
+                    <span style={{ fontSize: 32, marginLeft: 4 }}>ТН</span>
+                  }
                 />
                 <Button
                   type="primary"
                   size="large"
-                  style={{ marginTop: 24, borderRadius: 8 }}
+                  style={{ marginTop: 40, borderRadius: 12, paddingInline: 48 }}
                   onClick={() =>
                     window.scrollTo({
                       top: document.body.scrollHeight,
@@ -283,73 +286,78 @@ export default function DashboardTest() {
                 </Button>
               </Card>
             </Col>
+          </Row>
 
-            {/* Метрики */}
+          {/* uniform metrics grid (4-up ≥ lg) */}
+          <Row gutter={[24, 24]} justify="center" style={{ marginTop: 32 }}>
             {metrics.map(({ icon, title, value, color }) => (
-              <Col
-                key={title}
-                xs={12}
-                sm={8}
-                md={6}
-                lg={4}
-                xl={3}
-                style={{ display: "flex" }}
-              >
+              <Col key={title} xs={24} sm={12} md={8} lg={6} xl={6}>
                 <Card
-                  bordered={false}
                   hoverable
-                  style={{ width: "100%", borderRadius: 12 }}
-                  bodyStyle={{ padding: 16 }}
+                  variant="outlined"
+                  style={{
+                    borderRadius: 18,
+                    height: "100%",
+                    boxShadow: "0 8px 18px rgba(0,0,0,0.06)",
+                  }}
+                  styles={{ body: { padding: 28 } }}
                 >
-                  <Space align="start">
-                    <span style={{ fontSize: 24, color }}>{icon}</span>
-                    <Statistic
-                      title={<span style={{ fontSize: 12 }}>{title}</span>}
-                      value={value}
-                      valueStyle={{ fontSize: 20, fontWeight: 600, color }}
-                    />
+                  <Space
+                    direction="vertical"
+                    align="center"
+                    style={{ width: "100%", textAlign: "center" }}
+                  >
+                    <span style={{ fontSize: 38, color }}>{icon}</span>
+                    <Text style={{ fontSize: 14, color: "#8c8c8c" }}>
+                      {title}
+                    </Text>
+                    <Text style={{ fontSize: 36, fontWeight: 600, color }}>
+                      {value.toLocaleString("ru-RU")}
+                    </Text>
                   </Space>
                 </Card>
               </Col>
             ))}
           </Row>
 
-          {/* ----- Resources block ----- */}
+          {/* resources block */}
           <Card
+            variant="outlined"
             style={{
-              marginTop: 48,
-              borderRadius: 16,
-              border: "1px solid #f0f0f0",
+              marginTop: 64,
+              borderRadius: 20,
+              boxShadow: "0 8px 18px rgba(0,0,0,0.05)",
             }}
-            bodyStyle={{ padding: 32 }}
+            styles={{ body: { padding: 40 } }}
           >
-            <Title level={4} style={{ textAlign: "center", marginBottom: 32 }}>
+            <Title level={4} style={{ textAlign: "center", marginBottom: 40 }}>
               Задействовано сил и средств Мособлэнерго
             </Title>
-
             <Row gutter={[24, 24]} justify="center">
               {stats.map(({ icon, title, value, color }) => (
-                <Col
-                  key={title}
-                  xs={12}
-                  sm={8}
-                  md={6}
-                  lg={4}
-                  style={{ display: "flex" }}
-                >
+                <Col key={title} xs={24} sm={12} md={8} lg={6}>
                   <Card
-                    bordered={false}
                     hoverable
-                    style={{ width: "100%", borderRadius: 12 }}
-                    bodyStyle={{ padding: 16 }}
+                    variant="outlined"
+                    style={{
+                      borderRadius: 18,
+                      height: "100%",
+                      boxShadow: "0 8px 18px rgba(0,0,0,0.06)",
+                    }}
+                    styles={{ body: { padding: 28 } }}
                   >
-                    <Space align="start">
-                      <span style={{ fontSize: 24, color }}>{icon}</span>
-                      <Statistic
-                        title={<span style={{ fontSize: 12 }}>{title}</span>}
-                        value={value}
-                        valueStyle={{ fontSize: 20, fontWeight: 600, color }}
-                      />
+                    <Space
+                      direction="vertical"
+                      align="center"
+                      style={{ width: "100%", textAlign: "center" }}
+                    >
+                      <span style={{ fontSize: 38, color }}>{icon}</span>
+                      <Text style={{ fontSize: 14, color: "#8c8c8c" }}>
+                        {title}
+                      </Text>
+                      <Text style={{ fontSize: 36, fontWeight: 600, color }}>
+                        {value.toLocaleString("ru-RU")}
+                      </Text>
                     </Space>
                   </Card>
                 </Col>
