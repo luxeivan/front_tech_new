@@ -1,123 +1,41 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Typography, Spin } from "antd";
+/* --------------------------------------------------------------
+ *  src/app/dashboardtest/page.js
+ *  UI-страница: сводка по «уникальным открытым» (Ant Design)
+ * --------------------------------------------------------------*/
+
+import { useEffect, useMemo } from "react";
+import { Typography, Spin, Card, Row, Col, Statistic } from "antd";
+import { ThunderboltOutlined } from "@ant-design/icons";
 import { useSession } from "next-auth/react";
+import { useDashboardTestStore } from "@/stores/dashboardTestStore";
 
 const { Title } = Typography;
 
-/* ---------- helpers ------------------------------------------------ */
-
-/** Вернёт массив объектов: { guid, createdAt, dispNum } */
-async function getGuidRecords({ token, statusValue = null }) {
-  const pageSize = 100;
-  let page = 1;
-  const out = [];
-  const headers = token ? { Authorization: `Bearer ${token}` } : {};
-
-  // populate и GUID, и номер ТН
-  const populateQs =
-    "populate[0]=VIOLATION_GUID_STR&populate[1]=F81_010_NUMBER";
-
-  while (true) {
-    const qs = [
-      `pagination[page]=${page}`,
-      `pagination[pageSize]=${pageSize}`,
-      populateQs,
-    ];
-    if (statusValue) {
-      qs.push(
-        "filters[STATUS_NAME][value][$eqi]=" + encodeURIComponent(statusValue)
-      );
-    }
-
-    const url = `${process.env.NEXT_PUBLIC_STRAPI_URL}/api/tns?${qs.join("&")}`;
-    const res = await fetch(url, { headers });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-    const json = await res.json();
-    const items = json.data ?? [];
-
-    out.push(
-      ...items
-        .map((i) => {
-          const attr = i.attributes ?? i;
-
-          const guid =
-            attr?.VIOLATION_GUID_STR?.value ?? i?.VIOLATION_GUID_STR?.value;
-
-          const dispObj = attr?.F81_010_NUMBER ?? i?.F81_010_NUMBER;
-          const dispNum =
-            typeof dispObj?.value !== "undefined" ? dispObj.value : dispObj;
-
-          return guid
-            ? {
-                guid,
-                createdAt: attr?.createdAt ?? i?.createdAt,
-                dispNum,
-              }
-            : null;
-        })
-        .filter(Boolean)
-    );
-
-    const { pageCount } = json.meta?.pagination ?? {};
-    if (!pageCount || page >= pageCount) break;
-    page += 1;
-  }
-  return out;
-}
-
-async function getGuidList({ token, statusValue }) {
-  const recs = await getGuidRecords({ token, statusValue });
-  return recs.map((r) => r.guid);
-}
-
-/* ---------- component ---------------------------------------------- */
 export default function DashboardTest() {
   const { data: session, status } = useSession();
   const token = session?.user?.jwt ?? null;
 
-  const [uniqueOpen, setUniqueOpen] = useState(null);
-  const [err, setErr] = useState(false);
+  const { uniqueOpen, isLoading, error, loadUnique } = useDashboardTestStore();
 
+  /* загружаем данные после авторизации */
   useEffect(() => {
-    if (status === "loading") return;
+    if (status === "authenticated") loadUnique(token);
+  }, [status, token, loadUnique]);
 
-    (async () => {
-      try {
-        const [openRecs, poweredGuids, closedGuids, allGuids] =
-          await Promise.all([
-            getGuidRecords({ token, statusValue: "открыта" }),
-            getGuidList({ token, statusValue: "запитана" }),
-            getGuidList({ token, statusValue: "закрыта" }),
-            getGuidList({ token }), // вся база (для «без статуса»)
-          ]);
+  /* «текущее время» в Москве (пересчёт 1 раз за рендер) */
+  const currentDateTime = useMemo(
+    () =>
+      new Intl.DateTimeFormat("ru-RU", {
+        timeZone: "Europe/Moscow",
+        dateStyle: "short",
+        timeStyle: "medium",
+      }).format(new Date()),
+    []
+  );
 
-        // GUID-ы, встречающиеся НЕ у «открытых»
-        const others = new Set([
-          ...poweredGuids,
-          ...closedGuids,
-          ...allGuids.filter(
-            (g) =>
-              !openRecs.some((r) => r.guid === g) && // не открыт
-              !poweredGuids.includes(g) &&
-              !closedGuids.includes(g)
-          ),
-        ]);
-
-        const unique = openRecs.filter((r) => !others.has(r.guid));
-        setUniqueOpen(unique);
-      } catch (e) {
-        console.error("dashboardtest fetch", e);
-        setErr(true);
-      }
-    })();
-  }, [status, token]);
-
-  const isLoading = uniqueOpen === null;
-
-  /* ---------- UI ---------------------------------------------------- */
+  /* ---------------- UI ---------------- */
   return (
     <div
       style={{
@@ -126,83 +44,68 @@ export default function DashboardTest() {
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        justifyContent: "center",
-        gap: 24,
+        padding: 24,
+        gap: 32,
       }}
     >
-      {isLoading && !err && <Spin size="large" />}
+      {/* --- Заголовок --- */}
+      <h2
+        style={{
+          textAlign: "center",
+          marginBottom: 0,
+          color: "#1575bc",
+          fontWeight: "bold",
+          fontSize: 32,
+          userSelect: "none",
+          letterSpacing: 0.5,
+        }}
+      >
+        ТЕХНОЛОГИЧЕСКИЕ НАРУШЕНИЯ В ЭЛЕКТРИЧЕСКИХ СЕТЯХ АО «МОСОБЛЭНЕРГО»
+      </h2>
 
-      {!isLoading && !err && (
-        <>
-          <Title level={3} style={{ margin: 0 }}>
-            Уникальные&nbsp;«открытые» —&nbsp;
-            <span style={{ fontWeight: 700 }}>
-              {uniqueOpen.length.toLocaleString("ru-RU")}
-            </span>
-          </Title>
+      <div
+        style={{
+          textAlign: "center",
+          fontWeight: "bold",
+          fontSize: 20,
+          color: "#1575bc",
+          userSelect: "none",
+          letterSpacing: 0.5,
+        }}
+      >
+        По состоянию на {currentDateTime}
+      </div>
 
-          <div
-            style={{
-              maxHeight: 440,
-              width: "95%",
-              overflowY: "auto",
-              border: "1px solid #ddd",
-              borderRadius: 6,
-            }}
-          >
-            <table
+      {/* --- Контент --- */}
+      {isLoading && !error && <Spin size="large" />}
+
+      {!isLoading && !error && (
+        <Row gutter={[24, 24]} justify="center" style={{ width: "100%" }}>
+          <Col xs={24} sm={18} md={12} lg={8}>
+            <Card
+              hoverable
               style={{
-                width: "100%",
-                borderCollapse: "collapse",
-                fontSize: 12,
+                borderRadius: 12,
+                boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
               }}
             >
-              <thead
-                style={{ position: "sticky", top: 0, background: "#fafafa" }}
-              >
-                <tr>
-                  <th style={thStyle}>№ ТН</th>
-                  <th style={thStyle}>GUID</th>
-                  <th style={thStyle}>Дата&nbsp;добавления</th>
-                </tr>
-              </thead>
-              <tbody>
-                {uniqueOpen.map(({ guid, createdAt, dispNum }) => (
-                  <tr key={guid}>
-                    <td style={tdStyle}>{dispNum ?? "—"}</td>
-                    <td style={{ ...tdStyle, wordBreak: "break-all" }}>
-                      {guid}
-                    </td>
-                    <td style={tdStyle}>
-                      {new Date(createdAt).toLocaleString("ru-RU")}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
+              <Statistic
+                title="Всего уникальных ТН"
+                value={uniqueOpen.length}
+                valueStyle={{ color: "#1575bc", fontWeight: 700 }}
+                prefix={<ThunderboltOutlined />}
+                suffix="шт."
+              />
+            </Card>
+          </Col>
+        </Row>
       )}
 
-      {err && (
-        <Title level={4} type="danger" style={{ margin: 0 }}>
-          Не удалось загрузить данные
+      {error && (
+        <Title level={4} type="danger" style={{ marginTop: 24 }}>
+          {error}
         </Title>
       )}
     </div>
   );
 }
-
-/* --- simple cell styles --- */
-const thStyle = {
-  padding: "4px 8px",
-  borderBottom: "1px solid #ddd",
-  textAlign: "left",
-  whiteSpace: "nowrap",
-};
-
-const tdStyle = {
-  padding: "4px 8px",
-  borderBottom: "1px solid #eee",
-  whiteSpace: "nowrap",
-};
