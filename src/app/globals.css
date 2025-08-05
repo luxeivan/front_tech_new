@@ -1,3 +1,17 @@
+/* чуть более «мягкое» свечение: 1 сек. туда-обратно */
+@keyframes flash-green {
+  from {
+    background-color: #f6ffed;
+  }
+  to {
+    background-color: #ffffff;
+  }
+}
+/* применяем к строкам с классом tn-new */
+tr.tn-new {
+  animation: flash-green 1s ease-in-out infinite alternate;
+}
+
 :root {
   --background: #ffffff;
   --foreground: #171717;

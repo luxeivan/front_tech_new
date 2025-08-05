@@ -1,7 +1,10 @@
 import { useMemo } from "react";
 import dayjs from "dayjs";
 import { iconMap } from "../constants";
-
+import utc from "dayjs/plugin/utc";
+import local from "dayjs/plugin/timezone";
+dayjs.extend(utc);
+dayjs.extend(local);
 /**
  * Возвращает columns и dataSource для таблицы,
  * а также renderDesc (генератор items для <Descriptions />).
@@ -13,20 +16,28 @@ export default function useTableData({ rows, page, pageSize, openEdit }) {
     return rows.slice(start, start + pageSize);
   }, [rows, page, pageSize]);
 
-  const dataSource = paginated.map((item) => ({
-    key: item.id,
-    raw: item,
-    number: item.F81_010_NUMBER?.value ?? "—",
-    prodDept: item.SCNAME?.value ?? "—",
-    branch: item.OWN_SCNAME?.value ?? "—",
-    objectN: item.F81_041_ENERGOOBJECTNAME?.value ?? "—",
-    address: item.ADDRESS_LIST?.value ?? "—",
-    dispCenter: item.DISPCENTER_NAME_?.value ?? "—",
-    status: item.STATUS_NAME?.value ?? "—",
-    eventDate: item.F81_060_EVENTDATETIME?.value
-      ? dayjs(item.F81_060_EVENTDATETIME.value).format("DD.MM.YYYY HH:mm")
-      : "—",
-  }));
+  const FIVE_MIN_MS = 5 * 60 * 1000;
+
+  /* ---------- dataSource + метка «new» ---------- */
+  const now = Date.now();
+  const dataSource = paginated.map((item) => {
+    const ts =
+      item.F81_060_EVENTDATETIME?.value ??
+      item.CREATE_DATETIME?.value ??
+      item.createdAt;
+
+    return {
+      key: item.id,
+      raw: item,
+      isNew: ts && now - dayjs(ts).valueOf() < FIVE_MIN_MS,
+      number: item.F81_010_NUMBER?.value ?? "—",
+      objectN: item.F81_041_ENERGOOBJECTNAME?.value ?? "—",
+      address: item.ADDRESS_LIST?.value ?? "—",
+      dispCenter: item.DISPCENTER_NAME_?.value ?? "—",
+      status: item.STATUS_NAME?.value ?? "—",
+      eventDate: ts ? dayjs(ts).local().format("DD.MM.YYYY HH:mm") : "—",
+    };
+  });
 
   /* ---------- columns ---------- */
   const columns = [

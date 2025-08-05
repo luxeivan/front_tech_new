@@ -1,25 +1,82 @@
 import { create } from "zustand";
 import { useMemo, useState } from "react";
 
-/* ▸ какие поля нужны на главной */
+/* ▸ поля, которые реально нужны на главной + для фильтров */
 const LIST_FIELDS = [
+  // табличные
   "F81_010_NUMBER",
   "SCNAME",
   "OWN_SCNAME",
   "F81_041_ENERGOOBJECTNAME",
   "ADDRESS_LIST",
   "DISPCENTER_NAME_",
+
+  // фильтры
   "STATUS_NAME",
+  "VIOLATION_TYPE",
+  "OBJECTTYPE81",
+
+  // даты
   "F81_060_EVENTDATETIME",
+  "CREATE_DATETIME",
+  "F81_070_RESTOR_SUPPLAYDATETIME",
+  "F81_290_RECOVERYDATETIME",
 ];
 
-const PAGE_SIZE = 10;
-const CONC_LIMIT = 8;
+/* ---------- QS-строители ---------- */
+const buildFieldsParam = () =>
+  LIST_FIELDS.map((f, i) => `fields[${i}]=${encodeURIComponent(f)}`).join("&");
 
-const buildPopulateParam = () =>
-  LIST_FIELDS.map((f, i) => `populate[${i}]=${encodeURIComponent(f)}`).join(
-    "&"
-  );
+// src/stores/tnsDataStore.js
+
+const BASE_QS = "populate=*&sort=createdAt:desc";   // ← уже стоит правильно
+
+
+/* ---------- константы ---------- */
+const PAGE_SIZE = 10; // быстрая стартовая страница
+const CONC_LIMIT = 8; // ≤ 8 параллельных догрузок
+
+/* ---------- дефолтные объекты для обязательных фильтров ---------- */
+const FIELD_DEFAULTS = {
+  STATUS_NAME: { value: "", label: "Статус ТН", filter: "Да", edit: "Нет" },
+  VIOLATION_TYPE: { value: "", label: "Вид ТН", filter: "Да", edit: "Нет" },
+  OBJECTTYPE81: { value: "", label: "Вид объекта", filter: "Да", edit: "Нет" },
+  F81_060_EVENTDATETIME: {
+    value: null,
+    label: "Дата/Время возникновения",
+    filter: "Да",
+    edit: "Нет",
+  },
+  CREATE_DATETIME: {
+    value: null,
+    label: "Дата/Время фиксирования",
+    filter: "Да",
+    edit: "Нет",
+  },
+  F81_070_RESTOR_SUPPLAYDATETIME: {
+    value: null,
+    label: "Дата/Время восстановления (план)",
+    filter: "Да",
+    edit: "Нет",
+  },
+  F81_290_RECOVERYDATETIME: {
+    value: null,
+    label: "Дата/Время восстановления (факт)",
+    filter: "Да",
+    edit: "Нет",
+  },
+};
+
+/* патчим запись так, чтобы каждый «обязательный» ключ был в объекте */
+const ensureFilterFields = (tn) => {
+  const patched = { ...tn };
+  Object.entries(FIELD_DEFAULTS).forEach(([k, def]) => {
+    if (patched[k] === undefined) patched[k] = { ...def };
+  });
+  return patched;
+};
+
+/* ─────────────────────────────────────────────────────────────── */
 
 export const useTnsDataStore = create((set, get) => ({
   tns: [],
@@ -27,55 +84,53 @@ export const useTnsDataStore = create((set, get) => ({
   error: null,
   _lastFetchAt: null,
 
+  /* ---------- быстрая загрузка ---------- */
   async fetchTnsFast(token) {
     if (get().loading) return;
     set({ loading: true, error: null });
 
-    const qsPopulate = buildPopulateParam();
     const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
     try {
-      // ---------- первая страница ----------
+      /* ─── первая страница ─── */
       const firstURL =
-        `${process.env.NEXT_PUBLIC_STRAPI_URL}/api/tns?pagination[page]=1` +
-        `&pagination[pageSize]=${PAGE_SIZE}&${qsPopulate}`;
+        `${process.env.NEXT_PUBLIC_STRAPI_URL}/api/tns` +
+        `?pagination[page]=1&pagination[pageSize]=${PAGE_SIZE}&${BASE_QS}`;
 
       const firstResp = await fetch(firstURL, { headers });
       if (!firstResp.ok) throw new Error(`HTTP ${firstResp.status}`);
 
       const firstJson = await firstResp.json();
-      const page1 = Array.isArray(firstJson?.data) ? firstJson.data : [];
+      const page1 = (firstJson.data ?? []).map(ensureFilterFields);
       const totalPages =
-        firstJson?.meta?.pagination?.pageCount > 0
+        firstJson.meta?.pagination?.pageCount > 0
           ? firstJson.meta.pagination.pageCount
           : 1;
 
-      // кладём только первую страницу
       set({
         tns: page1,
         loading: false,
         _lastFetchAt: new Date().toISOString(),
       });
 
-      // ---------- остальное в фоне ----------
+      /* ─── остальное в фоне ─── */
       if (totalPages > 1) {
         const queue = Array.from({ length: totalPages - 1 }, (_, i) => i + 2);
-        const buffer = []; // сюда копим все страницы
+        const buffer = [];
 
         while (queue.length) {
           const batch = queue.splice(0, CONC_LIMIT);
-
           await Promise.allSettled(
             batch.map(async (p) => {
+              const url =
+                `${process.env.NEXT_PUBLIC_STRAPI_URL}/api/tns?pagination[page]=${p}` +
+                `&pagination[pageSize]=${PAGE_SIZE}&${BASE_QS}`;
               try {
-                const url =
-                  `${process.env.NEXT_PUBLIC_STRAPI_URL}/api/tns?pagination[page]=${p}` +
-                  `&pagination[pageSize]=${PAGE_SIZE}&${qsPopulate}`;
-
                 const r = await fetch(url, { headers });
                 if (!r.ok) throw new Error(`HTTP ${r.status}`);
                 const { data } = await r.json();
-                if (Array.isArray(data) && data.length) buffer.push(...data);
+                if (Array.isArray(data) && data.length)
+                  buffer.push(...data.map(ensureFilterFields));
               } catch (e) {
                 console.error(`page ${p} load error →`, e?.message || e);
               }
@@ -83,36 +138,15 @@ export const useTnsDataStore = create((set, get) => ({
           );
         }
 
-        if (buffer.length) {
-          // единый set — таблица перерисуется один раз
-          set((s) => ({ tns: [...s.tns, ...buffer] }));
-        }
+        if (buffer.length) set((s) => ({ tns: [...s.tns, ...buffer] }));
       }
     } catch (e) {
-      if (String(e?.message).startsWith("HTTP 400")) {
-        // fallback без populate
-        try {
-          const url =
-            `${process.env.NEXT_PUBLIC_STRAPI_URL}/api/tns?pagination[page]=1` +
-            `&pagination[pageSize]=${PAGE_SIZE}`;
-          const r = await fetch(url, { headers });
-          const j = await r.json();
-          set({
-            tns: Array.isArray(j?.data) ? j.data : [],
-            loading: false,
-            _lastFetchAt: new Date().toISOString(),
-            error: null,
-          });
-          return;
-        } catch {}
-      }
       set({ error: e?.message || "Fetch error", loading: false });
     }
   },
 
   /* ---------- полный объект при раскрытии ---------- */
   async fetchDetails(id, token) {
-    // если уже загружали – повторно не идём
     if (get().tns.find((t) => t.id === id && t._full)) return;
 
     const headers = token ? { Authorization: `Bearer ${token}` } : {};
@@ -120,21 +154,16 @@ export const useTnsDataStore = create((set, get) => ({
 
     try {
       const res = await fetch(url, { headers });
-
-      // 404 — запись пропала; просто выходим без выброса ошибки
-      if (res.status === 404) {
-        console.warn(`TN ${id} not found (404) – скрываю сообщение`);
-        return;
-      }
-
+      if (res.status === 404) return; // запись могла удалиться
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
       const { data } = await res.json();
       if (!data) return;
 
-      // помечаем запись как «полная»
       set((s) => ({
-        tns: s.tns.map((t) => (t.id === id ? { ...data, _full: true } : t)),
+        tns: s.tns.map((t) =>
+          t.id === id ? { ...ensureFilterFields(data), _full: true } : t
+        ),
       }));
     } catch (e) {
       console.error("fetchDetails", e?.message || e);
@@ -152,6 +181,7 @@ export const useTnsDataStore = create((set, get) => ({
     })),
 }));
 
+/* -------------------------- фильтры -------------------------- */
 export const useTnFilters = (listOverride) => {
   const { tns: storeTns = [] } = useTnsDataStore();
   const sourceRaw = listOverride ?? storeTns;

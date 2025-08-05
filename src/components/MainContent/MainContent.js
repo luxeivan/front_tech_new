@@ -95,10 +95,11 @@ export default function MainContent() {
   const sortedTns = useMemo(() => {
     const getTime = (t) =>
       dayjs(
-        t.F81_060_EVENTDATETIME?.value ||
-          t.CREATE_DATETIME?.value ||
-          t.createdAt
+        t.createdAt || // ← главное
+          t.F81_060_EVENTDATETIME?.value ||
+          t.CREATE_DATETIME?.value
       ).valueOf() || 0;
+
     return [...filteredTns].sort((a, b) => getTime(b) - getTime(a));
   }, [filteredTns]);
 
@@ -296,7 +297,11 @@ export default function MainContent() {
                 expandedRowKeys: expandedKeys,
                 onExpandedRowsChange: setExpandedKeys,
               }}
+              rowClassName={(record) =>
+                dayjs().diff(record.raw.createdAt, "minute") < 5 ? "tn-new" : ""
+              }
             />
+
             <div style={{ marginTop: 20, textAlign: "center" }}>
               <Pagination
                 current={page}
