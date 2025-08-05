@@ -6,37 +6,58 @@ import { useSession } from "next-auth/react";
 
 const { Title } = Typography;
 
-/* получить список всех VIOLATION_GUID */
-async function getViolationGuids({ token, statusValue = null }) {
-  const pageSize = 100;              // безопасный лимит Strapi
+/* ---------- helpers ------------------------------------------------ */
+
+/** Вернёт массив объектов: { guid, createdAt, dispNum } */
+async function getGuidRecords({ token, statusValue = null }) {
+  const pageSize = 100;
   let page = 1;
-  let all = [];
+  const out = [];
   const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+  // populate и GUID, и номер ТН
+  const populateQs =
+    "populate[0]=VIOLATION_GUID_STR&populate[1]=F81_010_NUMBER";
 
   while (true) {
     const qs = [
       `pagination[page]=${page}`,
       `pagination[pageSize]=${pageSize}`,
-      "populate=VIOLATION_GUID_STR",      // обязательно тянем компонент с GUID
+      populateQs,
     ];
     if (statusValue) {
       qs.push(
         "filters[STATUS_NAME][value][$eqi]=" + encodeURIComponent(statusValue)
       );
     }
-    const url = `${process.env.NEXT_PUBLIC_STRAPI_URL}/api/tns?` + qs.join("&");
+
+    const url = `${process.env.NEXT_PUBLIC_STRAPI_URL}/api/tns?${qs.join("&")}`;
     const res = await fetch(url, { headers });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
     const json = await res.json();
     const items = json.data ?? [];
-    all.push(
+
+    out.push(
       ...items
-        .map(
-          (i) =>
-            i?.attributes?.VIOLATION_GUID_STR?.value ??
-            i?.VIOLATION_GUID_STR?.value
-        )
+        .map((i) => {
+          const attr = i.attributes ?? i;
+
+          const guid =
+            attr?.VIOLATION_GUID_STR?.value ?? i?.VIOLATION_GUID_STR?.value;
+
+          const dispObj = attr?.F81_010_NUMBER ?? i?.F81_010_NUMBER;
+          const dispNum =
+            typeof dispObj?.value !== "undefined" ? dispObj.value : dispObj;
+
+          return guid
+            ? {
+                guid,
+                createdAt: attr?.createdAt ?? i?.createdAt,
+                dispNum,
+              }
+            : null;
+        })
         .filter(Boolean)
     );
 
@@ -44,67 +65,49 @@ async function getViolationGuids({ token, statusValue = null }) {
     if (!pageCount || page >= pageCount) break;
     page += 1;
   }
-
-  // возвращаем полный список, дубликаты сохраняются
-  return all; // возвращаем полный список, дубликаты сохраняются
+  return out;
 }
 
-async function getTotal({ token, statusValue = null }) {
-  const qsParts = ["pagination[page]=1", "pagination[pageSize]=1"];
-  if (statusValue) {
-    qsParts.push(
-      "filters[STATUS_NAME][value][$eqi]=" + encodeURIComponent(statusValue)
-    );
-  }
-
-  const url =
-    `${process.env.NEXT_PUBLIC_STRAPI_URL}/api/tns?` + qsParts.join("&");
-
-  const headers = token ? { Authorization: `Bearer ${token}` } : {};
-  const res = await fetch(url, { headers });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-  const json = await res.json();
-  return json.meta?.pagination?.total ?? 0;
+async function getGuidList({ token, statusValue }) {
+  const recs = await getGuidRecords({ token, statusValue });
+  return recs.map((r) => r.guid);
 }
 
+/* ---------- component ---------------------------------------------- */
 export default function DashboardTest() {
   const { data: session, status } = useSession();
   const token = session?.user?.jwt ?? null;
 
-  const [allCnt, setAllCnt] = useState(null);
-  const [openCnt, setOpenCnt] = useState(null);
-  const [poweredCnt, setPoweredCnt] = useState(null);
-  const [closedCnt, setClosedCnt] = useState(null);
-  const [guidList, setGuidList] = useState(null);
-  const [openGuidList, setOpenGuidList] = useState(null);
+  const [uniqueOpen, setUniqueOpen] = useState(null);
   const [err, setErr] = useState(false);
 
   useEffect(() => {
     if (status === "loading") return;
+
     (async () => {
       try {
-        const [
-          tot,
-          open,
-          powered,
-          closed,
-          guids,
-          openGuids,
-        ] = await Promise.all([
-          getTotal({ token }),
-          getTotal({ token, statusValue: "открыта" }),
-          getTotal({ token, statusValue: "запитана" }),
-          getTotal({ token, statusValue: "закрыта" }),
-          getViolationGuids({ token }),
-          getViolationGuids({ token, statusValue: "открыта" }),
+        const [openRecs, poweredGuids, closedGuids, allGuids] =
+          await Promise.all([
+            getGuidRecords({ token, statusValue: "открыта" }),
+            getGuidList({ token, statusValue: "запитана" }),
+            getGuidList({ token, statusValue: "закрыта" }),
+            getGuidList({ token }), // вся база (для «без статуса»)
+          ]);
+
+        // GUID-ы, встречающиеся НЕ у «открытых»
+        const others = new Set([
+          ...poweredGuids,
+          ...closedGuids,
+          ...allGuids.filter(
+            (g) =>
+              !openRecs.some((r) => r.guid === g) && // не открыт
+              !poweredGuids.includes(g) &&
+              !closedGuids.includes(g)
+          ),
         ]);
-        setAllCnt(tot);
-        setOpenCnt(open);
-        setPoweredCnt(powered);
-        setClosedCnt(closed);
-        setGuidList(guids);
-        setOpenGuidList(openGuids);
+
+        const unique = openRecs.filter((r) => !others.has(r.guid));
+        setUniqueOpen(unique);
       } catch (e) {
         console.error("dashboardtest fetch", e);
         setErr(true);
@@ -112,18 +115,9 @@ export default function DashboardTest() {
     })();
   }, [status, token]);
 
-  const isLoading =
-    allCnt === null ||
-    openCnt === null ||
-    poweredCnt === null ||
-    closedCnt === null ||
-    guidList === null ||
-    openGuidList === null;
+  const isLoading = uniqueOpen === null;
 
-  const noStatusCnt = !isLoading
-    ? allCnt - openCnt - poweredCnt - closedCnt
-    : 0;
-
+  /* ---------- UI ---------------------------------------------------- */
   return (
     <div
       style={{
@@ -133,82 +127,60 @@ export default function DashboardTest() {
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        gap: 32,
+        gap: 24,
       }}
     >
-      <Title level={2} style={{ margin: 0 }}>
-        Всего ТН в базе
-      </Title>
-
-      {!isLoading && !err && guidList?.length > 0 && (
-        <>
-          <Title level={4} style={{ margin: 0 }}>GUID‑список</Title>
-          <div
-            style={{
-              maxWidth: "80%",
-              maxHeight: 160,
-              overflowY: "auto",
-              textAlign: "center",
-              fontSize: 12,
-              lineHeight: 1.4,
-              opacity: 0.8,
-              wordBreak: "break-all",
-            }}
-          >
-            {guidList.join(", ")}
-          </div>
-        </>
-      )}
-
       {isLoading && !err && <Spin size="large" />}
 
       {!isLoading && !err && (
         <>
-          <Title style={{ margin: 0, fontSize: 72, lineHeight: 1 }}>
-            {allCnt.toLocaleString("ru-RU")}
+          <Title level={3} style={{ margin: 0 }}>
+            Уникальные&nbsp;«открытые» —&nbsp;
+            <span style={{ fontWeight: 700 }}>
+              {uniqueOpen.length.toLocaleString("ru-RU")}
+            </span>
           </Title>
 
-          <Title level={3} style={{ margin: 0 }}>
-            Из них&nbsp;«открыта» —&nbsp;
-            <span style={{ fontWeight: 700 }}>
-              {openCnt.toLocaleString("ru-RU")}
-            </span>
-          </Title>
-          {openGuidList?.length > 0 && (
-            <div
+          <div
+            style={{
+              maxHeight: 440,
+              width: "95%",
+              overflowY: "auto",
+              border: "1px solid #ddd",
+              borderRadius: 6,
+            }}
+          >
+            <table
               style={{
-                maxWidth: "80%",
-                maxHeight: 120,
-                overflowY: "auto",
-                textAlign: "center",
-                fontSize: 11,
-                lineHeight: 1.4,
-                opacity: 0.75,
-                wordBreak: "break-all",
-                marginBottom: 8,
+                width: "100%",
+                borderCollapse: "collapse",
+                fontSize: 12,
               }}
             >
-              {openGuidList.join(", ")}
-            </div>
-          )}
-          <Title level={3} style={{ margin: 0 }}>
-            Из них&nbsp;«запитана» —&nbsp;
-            <span style={{ fontWeight: 700 }}>
-              {poweredCnt.toLocaleString("ru-RU")}
-            </span>
-          </Title>
-          <Title level={3} style={{ margin: 0 }}>
-            Из них&nbsp;«закрыта» —&nbsp;
-            <span style={{ fontWeight: 700 }}>
-              {closedCnt.toLocaleString("ru-RU")}
-            </span>
-          </Title>
-          <Title level={3} style={{ margin: 0 }}>
-            Без&nbsp;статуса —&nbsp;
-            <span style={{ fontWeight: 700 }}>
-              {noStatusCnt.toLocaleString("ru-RU")}
-            </span>
-          </Title>
+              <thead
+                style={{ position: "sticky", top: 0, background: "#fafafa" }}
+              >
+                <tr>
+                  <th style={thStyle}>№ ТН</th>
+                  <th style={thStyle}>GUID</th>
+                  <th style={thStyle}>Дата&nbsp;добавления</th>
+                </tr>
+              </thead>
+              <tbody>
+                {uniqueOpen.map(({ guid, createdAt, dispNum }) => (
+                  <tr key={guid}>
+                    <td style={tdStyle}>{dispNum ?? "—"}</td>
+                    <td style={{ ...tdStyle, wordBreak: "break-all" }}>
+                      {guid}
+                    </td>
+                    <td style={tdStyle}>
+                      {new Date(createdAt).toLocaleString("ru-RU")}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </>
       )}
 
@@ -220,3 +192,17 @@ export default function DashboardTest() {
     </div>
   );
 }
+
+/* --- simple cell styles --- */
+const thStyle = {
+  padding: "4px 8px",
+  borderBottom: "1px solid #ddd",
+  textAlign: "left",
+  whiteSpace: "nowrap",
+};
+
+const tdStyle = {
+  padding: "4px 8px",
+  borderBottom: "1px solid #eee",
+  whiteSpace: "nowrap",
+};
