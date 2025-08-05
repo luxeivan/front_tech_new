@@ -5,7 +5,7 @@ export const useGlobalStore = create(
   persist(
     (set) => ({
       modalOpen: false,
-      refreshInterval: 30_000,
+      refreshInterval: 60_000,
 
       setModalOpen: (open) => set({ modalOpen: open }),
       setRefreshInterval: (ms) => set({ refreshInterval: ms }),

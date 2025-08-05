@@ -33,30 +33,24 @@ import useAutoRefresh from "./hooks/useAutoRefresh";
 import useTableData from "./hooks/useTableData";
 import { groupFields } from "./GroupFields";
 import SoInfo from "./SoInfo";
-import { iconMap } from "./constants";
 
 const { Title } = Typography;
 dayjs.locale("ru");
 
 export default function MainContent() {
-  /* ───── URL params ───── */
+  /* URL-параметры */
   const q = useSearchParams();
   const filterField = q.get("filter");
   const minValue = q.get("min");
 
-  /* ───── Auth / role ──── */
+  /* Auth */
   const { data: session } = useSession();
   const token = session?.user?.jwt;
-  const role = session?.user?.view_role; // «supergeneral» и т.д.
+  const role = session?.user?.view_role;
 
-  /* ───── global store ─── */
-  const modalOpen = useGlobalStore((s) => s.modalOpen);
-  const setModalOpen = useGlobalStore((s) => s.setModalOpen);
-
-  /* ───── main-store reactive fields ─── */
+  /* UI-store */
   const expandedKeys = useMainContentStore((s) => s.expandedKeys);
   const setExpandedKeys = useMainContentStore((s) => s.setExpandedKeys);
-
   const page = useMainContentStore((s) => s.page);
   const setPage = useMainContentStore((s) => s.setPage);
   const pageSize = useMainContentStore((s) => s.pageSize);
@@ -68,31 +62,36 @@ export default function MainContent() {
   const setEditValue = useMainContentStore((s) => s.setEditValue);
   const closeEdit = useMainContentStore((s) => s.closeEdit);
 
-  /* ───── data store ───── */
-  const { tns, loading, error, fetchTns, updateField } = useTnsDataStore();
+  /* Data-store */
+  const { tns, loading, error, fetchTnsFast, fetchDetails, updateField } =
+    useTnsDataStore();
+  const tnsSafe = Array.isArray(tns) ? tns : [];
+  console.log("item that приходит в таблицу →", tnsSafe?.[0]);
 
-  /* ───── initial fetch + auto-refresh ─ */
+  /* первый fetch */
   useEffect(() => {
-    if (token) fetchTns(token);
-  }, [token, fetchTns]);
-  useAutoRefresh({ token, fetchFn: fetchTns, expandedKeys });
+    if (token) fetchTnsFast(token);
+  }, [token, fetchTnsFast]);
 
-  /* ───── фильтрация URL ─ */
-  let tnsByField = tns;
+  /* авто-обновление */
+  useAutoRefresh({ token, expandedKeys });
+
+  /* фильтрация по URL */
+  let tnsByField = tnsSafe;
   if (filterField) {
     const min = minValue !== null ? Number(minValue) : 1;
-    tnsByField = tns.filter((t) =>
+    tnsByField = tnsSafe.filter((t) =>
       filterField === "DISTRICT"
         ? t[filterField]?.value?.trim()
         : Number(t[filterField]?.value) >= min
     );
   }
 
-  /* ───── селекты-фильтры ─ */
+  /* фильтры-селекты */
   const { filterableFields, filters, setFilterValue, filteredTns } =
     useTnFilters(tnsByField);
 
-  /* ───── сортировка —— новые вверху ─ */
+  /* сортировка */
   const sortedTns = useMemo(() => {
     const getTime = (t) =>
       dayjs(
@@ -103,7 +102,7 @@ export default function MainContent() {
     return [...filteredTns].sort((a, b) => getTime(b) - getTime(a));
   }, [filteredTns]);
 
-  /* ───── columns + dataSource ─ */
+  /* таблица */
   const { dataSource, columns, renderDesc } = useTableData({
     rows: sortedTns,
     page,
@@ -124,8 +123,10 @@ export default function MainContent() {
     ),
   });
 
-  /* ───── expanded row ─ */
+  /* раскрытая строка */
   const expandedRowRender = (record) => {
+    if (!record.raw._full && token) fetchDetails(record.raw.id, token);
+
     const { main, dateStatus, outageConsumer, resources, others } = groupFields(
       record.raw
     );
@@ -203,7 +204,6 @@ export default function MainContent() {
       },
     ];
 
-    /* hidden SendPart for "supergeneral" */
     return role === "supergeneral" ? (
       <Tabs
         size="small"
@@ -216,7 +216,7 @@ export default function MainContent() {
     );
   };
 
-  /* ───── helpers ─ */
+  /* helpers */
   const router = useRouter();
   const clearFilters = () => {
     filterableFields.forEach((k) => setFilterValue(k, "Все"));
@@ -224,11 +224,11 @@ export default function MainContent() {
     router.replace("/dashboard");
   };
 
-  /* ───── render ─ */
+  /* -------- RENDER -------- */
   return (
     <ConfigProvider locale={ru_RU}>
-      {/* ------- HEADER ------- */}
       <div style={{ padding: 20 }}>
+        {/* HEADER */}
         <div
           style={{
             marginBottom: 16,
@@ -249,7 +249,7 @@ export default function MainContent() {
             <Button
               type="primary"
               icon={<ReloadOutlined />}
-              onClick={() => token && fetchTns(token)}
+              onClick={() => token && fetchTnsFast(token)}
             >
               Обновить
             </Button>
@@ -260,9 +260,9 @@ export default function MainContent() {
           </Space>
         </div>
 
-        {/* ------- FILTERS ------- */}
+        {/* FILTER BAR */}
         <FilterBar
-          tns={tns}
+          tns={tnsSafe}
           filterableFields={filterableFields}
           filters={filters}
           setFilterValue={setFilterValue}
@@ -272,15 +272,17 @@ export default function MainContent() {
           }}
         />
 
-        {/* ------- TABLE / UI ------- */}
-        {error && (
-          <Alert type="error" message={error} style={{ marginBottom: 16 }} />
-        )}
-        {loading ? (
+        {/* TABLE / STATE */}
+        {loading && (
           <div style={{ textAlign: "center", marginTop: 50 }}>
             <Spin size="large" />
+            <p style={{ marginTop: 16, fontSize: 16 }}>
+              Загружаю&nbsp;новые&nbsp;данные, пожалуйста&nbsp;подождите…
+            </p>
           </div>
-        ) : (
+        )}
+
+        {!loading && !error && tnsSafe.length > 0 && (
           <>
             <Table
               columns={columns}
@@ -310,26 +312,35 @@ export default function MainContent() {
             </div>
           </>
         )}
+
+        {error && !loading && (
+          <Alert
+            type="error"
+            message={error}
+            style={{ margin: "50px auto", maxWidth: 600 }}
+            showIcon
+          />
+        )}
       </div>
 
-      {/* ------- EDIT MODAL ------- */}
+      {/* EDIT MODAL */}
       <SaveModal
         editing={editing}
         editValue={editValue}
         setEditValue={setEditValue}
         onSave={async () => {
-          const { tnId, docId, fieldKey } = editing;
+          const { tnId, fieldKey } = editing;
           try {
             await updateField(tnId, fieldKey, editValue.trim());
             closeEdit();
-            setModalOpen(false);
+            useGlobalStore.getState().setModalOpen(false);
           } catch {
             message.error("Не удалось сохранить");
           }
         }}
         onCancel={() => {
           closeEdit();
-          setModalOpen(false);
+          useGlobalStore.getState().setModalOpen(false);
         }}
       />
     </ConfigProvider>
