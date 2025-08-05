@@ -1,3 +1,8 @@
+/**************************************************************************
+ *  src/app/dashboardtest/page.js
+ *  – витрина «уникальных открытых» с реальными цифрами из Strapi
+ **************************************************************************/
+
 "use client";
 
 import { useEffect, useMemo } from "react";
@@ -34,9 +39,14 @@ import { useDashboardTestStore } from "@/stores/dashboardTestStore";
 
 const { Text, Title } = Typography;
 
-const getNum = (item, field) =>
-  Number(item?.[field]?.value ?? item?.[field] ?? 0);
+/* ---------- utils --------------------------------------------------- */
+const asNum = (v) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+};
+const getNum = (item, field) => asNum(item?.[field]?.value ?? item?.[field]);
 
+/* ---------- what we show & where брать ----------------------------- */
 const metricDefs = [
   {
     icon: <ThunderboltOutlined />,
@@ -54,7 +64,7 @@ const metricDefs = [
     icon: <HomeOutlined />,
     title: "Населённых пунктов",
     custom: (tns) =>
-      new Set(tns.map((i) => i.DISTRICT?.value || i.DISTRICT).filter(Boolean))
+      new Set(tns.map((i) => i.DISTRICT?.value ?? i.DISTRICT).filter(Boolean))
         .size,
     color: "#1890ff",
   },
@@ -149,8 +159,7 @@ const statDefs = [
   },
 ];
 
-/* ------------------------------------------------ component -------- */
-
+/* ---------- component ---------------------------------------------- */
 export default function DashboardTest() {
   const { data: session, status } = useSession();
   const token = session?.user?.jwt ?? null;
@@ -161,7 +170,7 @@ export default function DashboardTest() {
     if (status === "authenticated") loadUnique(token);
   }, [status, token, loadUnique]);
 
-  /* агрегаты по метрикам */
+  /* ---------- aggregated metrics / stats ---------- */
   const metrics = useMemo(() => {
     if (!uniqueOpen?.length) return [];
     return metricDefs.map((m) => ({
@@ -181,7 +190,6 @@ export default function DashboardTest() {
     }));
   }, [uniqueOpen]);
 
-  /* текущее время (Москва) */
   const currentDateTime = useMemo(
     () =>
       new Intl.DateTimeFormat("ru-RU", {
@@ -192,15 +200,15 @@ export default function DashboardTest() {
     []
   );
 
+  /* ---------------- UI --------------------------------------------- */
   return (
     <div style={{ padding: 24, maxWidth: 1400, margin: "0 auto" }}>
-      {/* ----- Header ----- */}
       <Title
         level={2}
         style={{
           textAlign: "center",
           color: "#1575bc",
-          fontWeight: "bold",
+          fontWeight: 700,
           letterSpacing: 0.5,
           marginBottom: 8,
           userSelect: "none",
@@ -212,7 +220,7 @@ export default function DashboardTest() {
         style={{
           display: "block",
           textAlign: "center",
-          fontWeight: "bold",
+          fontWeight: 600,
           fontSize: 18,
           color: "#1575bc",
           marginBottom: 40,
@@ -223,7 +231,6 @@ export default function DashboardTest() {
         По состоянию на {currentDateTime}
       </Text>
 
-      {/* ----- Loading / Error ----- */}
       {isLoading && !error && (
         <Space style={{ width: "100%", justifyContent: "center" }}>
           <Spin size="large" />
@@ -238,8 +245,9 @@ export default function DashboardTest() {
 
       {!isLoading && !error && uniqueOpen && (
         <>
-          {/* ----- BIG “Всего” card ----- */}
+          {/* ----- Top cards ----- */}
           <Row gutter={[24, 24]} justify="center">
+            {/* «Всего» */}
             <Col xs={24} sm={12} md={10} lg={8}>
               <Card
                 bordered={false}
@@ -276,7 +284,7 @@ export default function DashboardTest() {
               </Card>
             </Col>
 
-            {/* ----- Metrics cards ----- */}
+            {/* Метрики */}
             {metrics.map(({ icon, title, value, color }) => (
               <Col
                 key={title}
@@ -306,7 +314,7 @@ export default function DashboardTest() {
             ))}
           </Row>
 
-          {/* ----- Resources section ----- */}
+          {/* ----- Resources block ----- */}
           <Card
             style={{
               marginTop: 48,
