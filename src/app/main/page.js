@@ -22,6 +22,7 @@ import dayjs from "dayjs";
 import "dayjs/locale/ru";
 dayjs.locale("ru");
 import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { useDashboardTestStore } from "@/stores/dashboardTestStore";
 
 const { Title } = Typography;
@@ -33,6 +34,7 @@ const formatDate = (d) => (d ? dayjs(d).format("DD.MM.YYYY HH:mm:ss") : "—");
 
 export default function MainPage() {
   const { data: session, status } = useSession();
+  const router = useRouter();
   const token = session?.user?.jwt ?? null;
   const { uniqueOpen, isLoading, error, loadUnique } = useDashboardTestStore();
 
@@ -93,6 +95,13 @@ export default function MainPage() {
     }, 1000);
     return () => clearInterval(timer);
   }, [expandedKeys, editing]);
+
+  // redirect unauthenticated users
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      router.push("/login");
+    }
+  }, [status, router]);
 
   // initial load
   useEffect(() => {
@@ -220,8 +229,17 @@ export default function MainPage() {
     { title: "Дата/время возникновения", dataIndex: "event", key: "event", width: 180 },
   ];
 
-  return (
-    <div style={{ padding: 24, width: "100%", margin: "0" }}>
+  if (status === "loading") {
+    return (
+      <div style={{ textAlign: "center", padding: 100 }}>
+        <Spin size="large" />
+      </div>
+    );
+  }
+
+  if (status === "authenticated") {
+    return (
+      <div style={{ padding: 24, width: "100%", margin: "0" }}>
       <Title level={3} style={{ textAlign: "center", marginBottom: 16 }}>
         {`Всего открытых ТН: ${uniqueOpen.length}`}
       </Title>
@@ -439,6 +457,7 @@ export default function MainPage() {
           />
         </Modal>
       )}
-    </div>
-  );
+      </div>
+    );
+  }
 }
