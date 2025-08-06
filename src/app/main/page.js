@@ -1,7 +1,7 @@
 "use client";
 
 import "@/app/globals.css";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import {
   Table,
   Typography,
@@ -37,6 +37,44 @@ export default function MainPage() {
   const router = useRouter();
   const token = session?.user?.jwt ?? null;
   const { uniqueOpen, isLoading, error, loadUnique } = useDashboardTestStore();
+
+  const firstLoadRef = useRef(false);
+  const lastCreatedAtRef = useRef(null);
+  const [newGuids, setNewGuids] = useState([]);
+
+  // detect newly fetched TNs and highlight + play sound (by createdAt)
+  useEffect(() => {
+    if (isLoading || uniqueOpen.length === 0) return;
+    // Find newest createdAt timestamp in current data
+    const createdAts = uniqueOpen
+      .map((u) => new Date(u.createdAt))
+      .filter((d) => !isNaN(d));
+    if (createdAts.length === 0) {
+      lastCreatedAtRef.current = null;
+      firstLoadRef.current = true;
+      return;
+    }
+    const newestCreatedAt = new Date(Math.max(...createdAts.map((d) => d.getTime())));
+    let newly = [];
+    if (firstLoadRef.current === true && lastCreatedAtRef.current) {
+      // Only consider as "new" if strictly newer than previous
+      if (newestCreatedAt > lastCreatedAtRef.current) {
+        newly = uniqueOpen
+          .filter((u) => new Date(u.createdAt) > lastCreatedAtRef.current)
+          .map((u) => u.guid);
+      }
+      if (newly.length) {
+        setNewGuids(newly);
+        // play alert sound
+        new Audio("/sounds/sound.mp3").play().catch(() => {});
+        // clear highlight after 30 seconds
+        setTimeout(() => setNewGuids([]), 30000);
+      }
+    }
+    // Always update lastCreatedAtRef
+    lastCreatedAtRef.current = newestCreatedAt;
+    firstLoadRef.current = true;
+  }, [uniqueOpen, isLoading]);
 
   const [countdown, setCountdown] = useState(60);
   const [expandedKeys, setExpandedKeys] = useState([]);
@@ -85,7 +123,7 @@ export default function MainPage() {
   useEffect(() => {
     const timer = setInterval(() => {
       setCountdown((prev) => {
-        if (expandedKeys.length > 0 || editing) return prev;
+        if (expandedKeys.length > 0 || editing || isLoading) return prev;
         if (prev <= 1) {
           window.location.reload();
           return 60;
@@ -94,7 +132,7 @@ export default function MainPage() {
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, [expandedKeys, editing]);
+  }, [expandedKeys, editing, isLoading]);
 
   // redirect unauthenticated users
   useEffect(() => {
@@ -246,8 +284,8 @@ export default function MainPage() {
 
       <Row justify="center" style={{ marginBottom: 16 }}>
         <Space wrap size="middle">
-          <Button>Дашборд</Button>
-          <Button onClick={() => loadUnique(token)}>Обновить</Button>
+          <Button onClick={() => router.push("/dashboardtest")}>Дашборд</Button>
+          <Button onClick={() => { setCountdown(60); loadUnique(token); }}>Обновить</Button>
           <Button
             onClick={() =>
               setFilters({
@@ -264,7 +302,9 @@ export default function MainPage() {
           >
             Сбросить фильтры
           </Button>
-          <Button>AI‑Аналитика</Button>
+          <Button onClick={() => message.info("Скоро здесь появится AI аналитика")}>
+            AI‑Аналитика
+          </Button>
         </Space>
       </Row>
 
@@ -358,7 +398,13 @@ export default function MainPage() {
             bordered
             scroll={{ x: true }}
             pagination={{ pageSize: 10, showSizeChanger: false }}
-            rowClassName={(record, index) => (index % 2 === 0 ? "row-light" : "")}
+            rowClassName={(record, index) =>
+              newGuids.includes(record.key)
+                ? "tn-new"
+                : index % 2 === 0
+                ? "row-light"
+                : ""
+            }
             expandable={{
               expandedRowRender: (record) => {
                 const hideFields = new Set([
