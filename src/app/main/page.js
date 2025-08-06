@@ -48,40 +48,7 @@ export default function MainPage() {
   const router = useRouter();
   const token = session?.user?.jwt ?? null;
   const { uniqueOpen, isLoading, error, loadUnique } = useDashboardTestStore();
-
-  const firstLoadRef = useRef(false);
-  const lastCreatedAtRef = useRef(null);
-  const [newGuids, setNewGuids] = useState([]);
-
-  useEffect(() => {
-    if (isLoading || uniqueOpen.length === 0) return;
-    const createdAts = uniqueOpen
-      .map((u) => new Date(u.createdAt))
-      .filter((d) => !isNaN(d));
-    if (createdAts.length === 0) {
-      lastCreatedAtRef.current = null;
-      firstLoadRef.current = true;
-      return;
-    }
-    const newestCreatedAt = new Date(
-      Math.max(...createdAts.map((d) => d.getTime()))
-    );
-    let newly = [];
-    if (firstLoadRef.current === true && lastCreatedAtRef.current) {
-      if (newestCreatedAt > lastCreatedAtRef.current) {
-        newly = uniqueOpen
-          .filter((u) => new Date(u.createdAt) > lastCreatedAtRef.current)
-          .map((u) => u.guid);
-      }
-      if (newly.length) {
-        setNewGuids(newly);
-        new Audio("/sounds/sound.mp3").play().catch(() => {});
-        setTimeout(() => setNewGuids([]), 30000);
-      }
-    }
-    lastCreatedAtRef.current = newestCreatedAt;
-    firstLoadRef.current = true;
-  }, [uniqueOpen, isLoading]);
+  const newGuids = useDashboardTestStore(state => state.newGuids);
 
   const [countdown, setCountdown] = useState(60);
   const [expandedKeys, setExpandedKeys] = useState([]);
@@ -510,14 +477,16 @@ export default function MainPage() {
                     <Card
                       size="small"
                       style={{ margin: 0, padding: 16, background: "#fafafa" }}
-                      bodyStyle={{ padding: 0 }}
+                      styles={{ body: { padding: 0 } }}
                     >
                       <Descriptions
                         size="small"
                         column={2}
                         bordered={false}
-                        labelStyle={{ fontWeight: 600, color: "#fa8c16" }}
-                        contentStyle={{ paddingLeft: 8 }}
+                        styles={{
+                          label: { fontWeight: 600, color: "#fa8c16" },
+                          content: { paddingLeft: 8 }
+                        }}
                         items={entries.map(([k, v]) => {
                           const label =
                             v && typeof v === "object" && "label" in v
