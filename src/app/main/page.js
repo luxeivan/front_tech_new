@@ -34,6 +34,9 @@ const formatDate = (d) => (d ? dayjs(d).format("DD.MM.YYYY HH:mm:ss") : "—");
 
 export default function MainPage() {
   const { data: session, status } = useSession();
+  const userName = session?.user?.name || '';
+  const userRole = session?.user?.view_role;
+  const isSuper = userRole === 'supergeneral';
   const router = useRouter();
   const token = session?.user?.jwt ?? null;
   const { uniqueOpen, isLoading, error, loadUnique } = useDashboardTestStore();
@@ -278,6 +281,9 @@ export default function MainPage() {
   if (status === "authenticated") {
     return (
       <div style={{ padding: 24, width: "100%", margin: "0" }}>
+      <Title level={1} style={{ textAlign: 'center', marginBottom: 16 }}>
+        {`Добро пожаловать, ${userName}`}
+      </Title>
       <Title level={3} style={{ textAlign: "center", marginBottom: 16 }}>
         {`Всего открытых ТН: ${uniqueOpen.length}`}
       </Title>
@@ -454,7 +460,7 @@ export default function MainPage() {
                         children: (
                           <span>
                             {display}
-                            {isEditable && (
+                            {isEditable && !isSuper && (
                               <EditOutlined
                                 style={{ color: "#52c41a", marginLeft: 8, cursor: "pointer" }}
                                 onClick={() =>
