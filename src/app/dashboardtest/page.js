@@ -160,10 +160,26 @@ export default function DashboardTest() {
 
   const { uniqueOpen, isLoading, error, loadUnique } = useDashboardTestStore();
 
+  // Load data when authenticated
   useEffect(() => {
-    if (status === "authenticated") loadUnique(token);
+    if (status === "authenticated") {
+      loadUnique(token);
+    }
   }, [status, token, loadUnique]);
 
+  // Current time for header
+  const [now, setNow] = useState(null);
+  useEffect(() => {
+    setNow(
+      new Intl.DateTimeFormat("ru-RU", {
+        timeZone: "Europe/Moscow",
+        dateStyle: "short",
+        timeStyle: "medium",
+      }).format(new Date())
+    );
+  }, []);
+
+  // Metrics and stats
   const metrics = useMemo(() => {
     if (!uniqueOpen?.length) return [];
     return metricDefs.map((m) => ({
@@ -183,17 +199,30 @@ export default function DashboardTest() {
     }));
   }, [uniqueOpen]);
 
-  /* client-only time (гидрация ок) */
-  const [now, setNow] = useState(null);
   useEffect(() => {
-    setNow(
-      new Intl.DateTimeFormat("ru-RU", {
-        timeZone: "Europe/Moscow",
-        dateStyle: "short",
-        timeStyle: "medium",
-      }).format(new Date())
+    if (status === "unauthenticated") {
+      router.push("/login");
+    }
+  }, [status, router]);
+
+  if (status === "loading") {
+    return (
+      <div
+        style={{
+          width: "100%",
+          height: "100vh",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+        }}
+      >
+        <Spin size="large" />
+      </div>
     );
-  }, []);
+  }
+  if (status === "unauthenticated") {
+    return null;
+  }
 
   /* ---------- UI ---------- */
   return (
