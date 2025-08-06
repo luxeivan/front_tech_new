@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Typography,
   Row,
@@ -155,6 +156,7 @@ const statDefs = [
 export default function DashboardTest() {
   const { data: session, status } = useSession();
   const token = session?.user?.jwt ?? null;
+  const router = useRouter();
 
   const { uniqueOpen, isLoading, error, loadUnique } = useDashboardTestStore();
 
@@ -271,12 +273,13 @@ export default function DashboardTest() {
                   type="primary"
                   size="large"
                   style={{ marginTop: 40, borderRadius: 12, paddingInline: 48 }}
-                  onClick={() =>
-                    window.scrollTo({
-                      top: document.body.scrollHeight,
-                      behavior: "smooth",
-                    })
-                  }
+                  // onClick={() =>
+                  //   window.scrollTo({
+                  //     top: document.body.scrollHeight,
+                  //     behavior: "smooth",
+                  //   })
+                  // }
+                  onClick={() => router.push("/main")}
                 >
                   подробно
                 </Button>

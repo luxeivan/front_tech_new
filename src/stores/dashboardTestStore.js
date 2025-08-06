@@ -1,16 +1,8 @@
-/**************************************************************************
- *  src/stores/dashboardTestStore.js
- *  – Zustand-хранилище: грузит «уникальные открытые» ТН + все поля
- **************************************************************************/
-
 "use client";
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-/* ---------------- helpers ------------------------------------------ */
-
-/** Грузит партии по 100 объектов. Если full=true — populate=* (берём всё). */
 async function fetchTns({ token, statusValue = null, full = false }) {
   const pageSize = 100;
   let page = 1;
@@ -56,7 +48,6 @@ const getGuid = (item) =>
     ?.trim()
     ?.toUpperCase() || null;
 
-/* ---------------- store ------------------------------------------- */
 export const useDashboardTestStore = create(
   persist(
     (set) => ({
