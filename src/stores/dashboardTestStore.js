@@ -50,7 +50,8 @@ const getGuid = (item) =>
 
 export const useDashboardTestStore = create(
   persist(
-    (set) => ({
+    // core store with get() available for loadUnique
+    (set, get) => ({
       uniqueOpen: [],
       isLoading: false,
       error: null,

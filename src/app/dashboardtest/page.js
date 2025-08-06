@@ -259,7 +259,7 @@ export default function DashboardTest() {
         <Space
           style={{ width: "100%", justifyContent: "center", marginTop: 80 }}
         >
-          <Spin size="large" tip="Загружаем данные…" />
+          <Spin size="large" />
         </Space>
       )}
       {error && (
