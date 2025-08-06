@@ -1,5 +1,6 @@
+// eslint-disable-next-line
 "use client";
-
+import React from "react";
 import "@/app/globals.css";
 import { useEffect, useMemo, useState, useRef } from "react";
 import {
@@ -17,7 +18,14 @@ import {
   Col,
   Space,
 } from "antd";
-import { EditOutlined } from "@ant-design/icons";
+import {
+  EditOutlined,
+  NumberOutlined,
+  HomeOutlined,
+  EnvironmentOutlined,
+  DashboardOutlined,
+  CalendarOutlined,
+} from "@ant-design/icons";
 import dayjs from "dayjs";
 import "dayjs/locale/ru";
 dayjs.locale("ru");
@@ -34,9 +42,9 @@ const formatDate = (d) => (d ? dayjs(d).format("DD.MM.YYYY HH:mm:ss") : "—");
 
 export default function MainPage() {
   const { data: session, status } = useSession();
-  const userName = session?.user?.name || '';
+  const userName = session?.user?.name || "";
   const userRole = session?.user?.view_role;
-  const isSuper = userRole === 'supergeneral';
+  const isSuper = userRole === "supergeneral";
   const router = useRouter();
   const token = session?.user?.jwt ?? null;
   const { uniqueOpen, isLoading, error, loadUnique } = useDashboardTestStore();
@@ -45,10 +53,8 @@ export default function MainPage() {
   const lastCreatedAtRef = useRef(null);
   const [newGuids, setNewGuids] = useState([]);
 
-  // detect newly fetched TNs and highlight + play sound (by createdAt)
   useEffect(() => {
     if (isLoading || uniqueOpen.length === 0) return;
-    // Find newest createdAt timestamp in current data
     const createdAts = uniqueOpen
       .map((u) => new Date(u.createdAt))
       .filter((d) => !isNaN(d));
@@ -57,10 +63,11 @@ export default function MainPage() {
       firstLoadRef.current = true;
       return;
     }
-    const newestCreatedAt = new Date(Math.max(...createdAts.map((d) => d.getTime())));
+    const newestCreatedAt = new Date(
+      Math.max(...createdAts.map((d) => d.getTime()))
+    );
     let newly = [];
     if (firstLoadRef.current === true && lastCreatedAtRef.current) {
-      // Only consider as "new" if strictly newer than previous
       if (newestCreatedAt > lastCreatedAtRef.current) {
         newly = uniqueOpen
           .filter((u) => new Date(u.createdAt) > lastCreatedAtRef.current)
@@ -68,13 +75,10 @@ export default function MainPage() {
       }
       if (newly.length) {
         setNewGuids(newly);
-        // play alert sound
         new Audio("/sounds/sound.mp3").play().catch(() => {});
-        // clear highlight after 30 seconds
         setTimeout(() => setNewGuids([]), 30000);
       }
     }
-    // Always update lastCreatedAtRef
     lastCreatedAtRef.current = newestCreatedAt;
     firstLoadRef.current = true;
   }, [uniqueOpen, isLoading]);
@@ -83,7 +87,6 @@ export default function MainPage() {
   const [expandedKeys, setExpandedKeys] = useState([]);
   const [editing, setEditing] = useState(null);
 
-  // filters state
   const [filters, setFilters] = useState({
     OWN_SCNAME: "Все",
     SCNAME: "Все",
@@ -95,7 +98,6 @@ export default function MainPage() {
     F81_290_RECOVERYDATETIME: "Все",
   });
 
-  // perform PUT and reload data
   const handleSaveEdit = async () => {
     if (!editing) return;
     const { documentId, fieldKey, value } = editing;
@@ -122,7 +124,6 @@ export default function MainPage() {
     }
   };
 
-  // countdown effect (pause when detail expanded or editing)
   useEffect(() => {
     const timer = setInterval(() => {
       setCountdown((prev) => {
@@ -137,21 +138,18 @@ export default function MainPage() {
     return () => clearInterval(timer);
   }, [expandedKeys, editing, isLoading]);
 
-  // redirect unauthenticated users
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/login");
     }
   }, [status, router]);
 
-  // initial load
   useEffect(() => {
     if (status === "authenticated" && uniqueOpen.length === 0) {
       loadUnique(token);
     }
   }, [status, token, uniqueOpen.length, loadUnique]);
 
-  // sort by event datetime descending
   const sorted = useMemo(
     () =>
       [...uniqueOpen].sort(
@@ -218,10 +216,7 @@ export default function MainPage() {
           val(r.OWN_SCNAME) !== filters.OWN_SCNAME
         )
           return false;
-        if (
-          filters.SCNAME !== "Все" &&
-          val(r.SCNAME) !== filters.SCNAME
-        )
+        if (filters.SCNAME !== "Все" && val(r.SCNAME) !== filters.SCNAME)
           return false;
         if (
           filters.VIOLATION_TYPE !== "Все" &&
@@ -262,13 +257,80 @@ export default function MainPage() {
     [dataSource, filters]
   );
 
-  const columns = [
-    { title: "№ ТН", dataIndex: "number", key: "number", width: 120 },
-    { title: "Объект", dataIndex: "object", key: "object", responsive: ["md"] },
-    { title: "Адрес", dataIndex: "address", key: "address", responsive: ["lg"] },
-    { title: "Дисп. центр", dataIndex: "center", key: "center", width: 160, responsive: ["md"] },
-    { title: "Дата/время возникновения", dataIndex: "event", key: "event", width: 180 },
+  const rawColumns = [
+    {
+      title: (
+        <>
+          <NumberOutlined style={{ marginRight: 4, color: "#fa8c16" }} />
+          <span>№ ТН</span>
+        </>
+      ),
+      dataIndex: "number",
+      key: "number",
+      width: 120,
+    },
+    {
+      title: (
+        <>
+          <HomeOutlined style={{ marginRight: 4, color: "#fa8c16" }} />
+          <span>Объект</span>
+        </>
+      ),
+      dataIndex: "object",
+      key: "object",
+      responsive: ["md"],
+    },
+    {
+      title: (
+        <>
+          <EnvironmentOutlined style={{ marginRight: 4, color: "#fa8c16" }} />
+          <span>Адрес</span>
+        </>
+      ),
+      dataIndex: "address",
+      key: "address",
+      responsive: ["lg"],
+    },
+    {
+      title: (
+        <>
+          <DashboardOutlined style={{ marginRight: 4, color: "#fa8c16" }} />
+          <span>Дисп. центр</span>
+        </>
+      ),
+      dataIndex: "center",
+      key: "center",
+      width: 160,
+      responsive: ["md"],
+    },
+    {
+      title: (
+        <>
+          <CalendarOutlined style={{ marginRight: 4, color: "#fa8c16" }} />
+          <span>Дата/время возникновения</span>
+        </>
+      ),
+      dataIndex: "event",
+      key: "event",
+      width: 180,
+    },
   ];
+  const columns = rawColumns.map((col) => ({
+    ...col,
+    align: "center",
+    title: (
+      <div
+        style={{
+          textAlign: "center",
+          fontWeight: 600,
+          fontSize: 14,
+          color: "#fa8c16",
+        }}
+      >
+        {col.title}
+      </div>
+    ),
+  }));
 
   if (status === "loading") {
     return (
@@ -281,234 +343,266 @@ export default function MainPage() {
   if (status === "authenticated") {
     return (
       <div style={{ padding: 24, width: "100%", margin: "0" }}>
-      <Title level={1} style={{ textAlign: 'center', marginBottom: 16 }}>
-        {`Добро пожаловать, ${userName}`}
-      </Title>
-      <Title level={3} style={{ textAlign: "center", marginBottom: 16 }}>
-        {`Всего открытых ТН: ${uniqueOpen.length}`}
-      </Title>
-
-      <Row justify="center" style={{ marginBottom: 16 }}>
-        <Space wrap size="middle">
-          <Button onClick={() => router.push("/dashboardtest")}>Дашборд</Button>
-          <Button onClick={() => { setCountdown(60); loadUnique(token); }}>Обновить</Button>
-          <Button
-            onClick={() =>
-              setFilters({
-                OWN_SCNAME: "Все",
-                SCNAME: "Все",
-                VIOLATION_TYPE: "Все",
-                OBJECTTYPE81: "Все",
-                F81_060_EVENTDATETIME: "Все",
-                CREATE_DATETIME: "Все",
-                F81_070_RESTOR_SUPPLAYDATETIME: "Все",
-                F81_290_RECOVERYDATETIME: "Все",
-              })
-            }
-          >
-            Сбросить фильтры
-          </Button>
-          <Button onClick={() => message.info("Скоро здесь появится AI аналитика")}>
-            AI‑Аналитика
-          </Button>
-        </Space>
-      </Row>
-
-      {/* <Title
-        level={4}
-        style={{ textAlign: "left", marginBottom: 8, marginTop: 16 }}
-      >
-        Фильтры
-      </Title> */}
-
-      {/* Filter bar */}
-      <Card
-        size="small"
-        style={{ width: "100%", margin: 0, padding: 16 }}
-      >
-        <Row gutter={[12, 12]} wrap>
-          {/* Select filters */}
-          {[
-            { key: "OWN_SCNAME", label: "Филиал" },
-            { key: "SCNAME", label: "Произв. отделение" },
-            { key: "VIOLATION_TYPE", label: "Вид ТН" },
-            { key: "OBJECTTYPE81", label: "Вид объекта" },
-          ].map(({ key, label }) => (
-            <Col xs={24} sm={12} md={6} key={key}>
-              <div style={{ marginBottom: 4, fontWeight: "500" }}>{label}</div>
-              <Select
-                style={{ width: "100%" }}
-                placeholder={label}
-                value={filters[key]}
-                onChange={(v) => setFilters((f) => ({ ...f, [key]: v }))}
-              >
-                <Option value="Все">Все</Option>
-                {filterOptions[key].map((opt) => (
-                  <Option key={opt} value={opt}>
-                    {opt}
-                  </Option>
-                ))}
-              </Select>
-            </Col>
-          ))}
-
-          {/* Date filters */}
-          {[
-            { key: "F81_060_EVENTDATETIME", label: "Дата возникновения" },
-            { key: "CREATE_DATETIME", label: "Дата фиксирования" },
-            { key: "F81_070_RESTOR_SUPPLAYDATETIME", label: "Дата восстановления (план)" },
-            { key: "F81_290_RECOVERYDATETIME", label: "Дата восстановления (факт)" },
-          ].map(({ key, label }) => (
-            <Col xs={24} sm={12} md={6} key={key}>
-              <div style={{ marginBottom: 4, fontWeight: "500" }}>{label}</div>
-              <Select
-                style={{ width: "100%" }}
-                placeholder={label}
-                value={filters[key]}
-                onChange={(v) => setFilters((f) => ({ ...f, [key]: v }))}
-              >
-                <Option value="Все">Все</Option>
-                {filterOptions[key].map((opt) => (
-                  <Option key={opt} value={opt}>
-                    {opt}
-                  </Option>
-                ))}
-              </Select>
-            </Col>
-          ))}
-        </Row>
-      </Card>
-
-      {/* Countdown timer */}
-      <div style={{ textAlign: "center", marginBottom: 24, color: "#888" }}>
-        Обновление через: {countdown} секунд
-      </div>
-
-      {isLoading && !error && (
-        <div style={{ textAlign: "center", padding: 100 }}>
-          <Spin size="large" />
-        </div>
-      )}
-
-      {error && (
-        <Title level={4} type="danger" style={{ textAlign: "center" }}>
-          {error}
+        <Title level={3} style={{ textAlign: "center", marginBottom: 16 }}>
+          {`Всего открытых ТН: ${uniqueOpen.length}`}
         </Title>
-      )}
 
-      {!isLoading && !error && (
-        <Card style={{ width: "100%", margin: 0, border: "none", boxShadow: "none" }}>
-          <Table
-            columns={columns}
-            dataSource={filteredData}
-            bordered
-            scroll={{ x: true }}
-            pagination={{ pageSize: 10, showSizeChanger: false }}
-            rowClassName={(record, index) =>
-              newGuids.includes(record.key)
-                ? "tn-new"
-                : index % 2 === 0
-                ? "row-light"
-                : ""
-            }
-            expandable={{
-              expandedRowRender: (record) => {
-                const hideFields = new Set([
-                  "documentId",
-                  "updatedAt",
-                  "createdAt",
-                  "publishedAt",
-                  "id",
-                  "SBYT_NOTIFICATION",
-                  "SBYT_NOTIFICATION_STR",
-                  "guid",
-                  "OBJECTNAMEKEY",
-                  "SWITCHNAMEKEY",
-                  "VIOLATION_GUID_STR",
-                ]);
-                const entries = Object.entries(record.full).filter(
-                  ([k]) => !hideFields.has(k)
-                );
-                return (
-                  <Descriptions size="small" column={1} bordered
-                    items={entries.map(([k, v]) => {
-                      const label =
-                        v && typeof v === "object" && "label" in v
-                          ? v.label
-                          : k;
-                      let rawVal =
-                        v == null
-                          ? null
-                          : typeof v === "object" && "value" in v
-                          ? v.value
-                          : v;
-                      const isEditable =
-                        v && typeof v === "object" && v.edit === "Да";
-                      let display = "Нет данных";
-                      if (rawVal != null && rawVal !== "") {
-                        display = String(rawVal);
-                        if (
-                          typeof rawVal === "string" &&
-                          /\d{4}-\d{2}-\d{2}T/.test(rawVal)
-                        ) {
-                          display = dayjs(rawVal).format("DD.MM.YYYY HH:mm:ss");
-                        }
-                      }
-                      return {
-                        key: k,
-                        label,
-                        children: (
-                          <span>
-                            {display}
-                            {isEditable && !isSuper && (
-                              <EditOutlined
-                                style={{ color: "#52c41a", marginLeft: 8, cursor: "pointer" }}
-                                onClick={() =>
-                                  setEditing({
-                                    recordKey: record.key,
-                                    documentId: record.full.documentId,
-                                    fieldKey: k,
-                                    label,
-                                    value: display,
-                                  })
-                                }
-                              />
-                            )}
-                          </span>
-                        ),
-                      };
-                    })}
-                  />
-                );
+        <Row justify="center" style={{ marginBottom: 16 }}>
+          <Space wrap size="middle">
+            <Button onClick={() => router.push("/dashboardtest")}>
+              Дашборд
+            </Button>
+            <Button
+              onClick={() => {
+                setCountdown(60);
+                loadUnique(token);
+              }}
+            >
+              Обновить
+            </Button>
+            <Button
+              onClick={() =>
+                setFilters({
+                  OWN_SCNAME: "Все",
+                  SCNAME: "Все",
+                  VIOLATION_TYPE: "Все",
+                  OBJECTTYPE81: "Все",
+                  F81_060_EVENTDATETIME: "Все",
+                  CREATE_DATETIME: "Все",
+                  F81_070_RESTOR_SUPPLAYDATETIME: "Все",
+                  F81_290_RECOVERYDATETIME: "Все",
+                })
+              }
+            >
+              Сбросить фильтры
+            </Button>
+            <Button
+              onClick={() => message.info("Скоро здесь появится AI аналитика")}
+            >
+              AI‑Аналитика
+            </Button>
+          </Space>
+        </Row>
+
+        <Card size="small" style={{ width: "100%", margin: 0, padding: 16 }}>
+          <Row gutter={[12, 12]} wrap>
+            {/* Select filters */}
+            {[
+              { key: "OWN_SCNAME", label: "Филиал" },
+              { key: "SCNAME", label: "Произв. отделение" },
+              { key: "VIOLATION_TYPE", label: "Вид ТН" },
+              { key: "OBJECTTYPE81", label: "Вид объекта" },
+            ].map(({ key, label }) => (
+              <Col xs={24} sm={12} md={6} key={key}>
+                <div style={{ marginBottom: 4, fontWeight: "500" }}>
+                  {label}
+                </div>
+                <Select
+                  style={{ width: "100%" }}
+                  placeholder={label}
+                  value={filters[key]}
+                  onChange={(v) => setFilters((f) => ({ ...f, [key]: v }))}
+                >
+                  <Option value="Все">Все</Option>
+                  {filterOptions[key].map((opt) => (
+                    <Option key={opt} value={opt}>
+                      {opt}
+                    </Option>
+                  ))}
+                </Select>
+              </Col>
+            ))}
+
+            {/* Date filters */}
+            {[
+              { key: "F81_060_EVENTDATETIME", label: "Дата возникновения" },
+              { key: "CREATE_DATETIME", label: "Дата фиксирования" },
+              {
+                key: "F81_070_RESTOR_SUPPLAYDATETIME",
+                label: "Дата восстановления (план)",
               },
-              rowExpandable: () => true,
-              expandedRowKeys: expandedKeys,
-              onExpand: (expanded, record) => {
-                setExpandedKeys(expanded ? [record.key] : []);
+              {
+                key: "F81_290_RECOVERYDATETIME",
+                label: "Дата восстановления (факт)",
               },
-            }}
-          />
+            ].map(({ key, label }) => (
+              <Col xs={24} sm={12} md={6} key={key}>
+                <div style={{ marginBottom: 4, fontWeight: "500" }}>
+                  {label}
+                </div>
+                <Select
+                  style={{ width: "100%" }}
+                  placeholder={label}
+                  value={filters[key]}
+                  onChange={(v) => setFilters((f) => ({ ...f, [key]: v }))}
+                >
+                  <Option value="Все">Все</Option>
+                  {filterOptions[key].map((opt) => (
+                    <Option key={opt} value={opt}>
+                      {opt}
+                    </Option>
+                  ))}
+                </Select>
+              </Col>
+            ))}
+          </Row>
         </Card>
-      )}
 
-      {editing && (
-        <Modal
-          title={editing.label}
-          open
-          onCancel={() => setEditing(null)}
-          onOk={handleSaveEdit}
-          okText="Сохранить"
-          cancelText="Отмена"
-        >
-          <Input
-            value={editing.value}
-            onChange={(e) =>
-              setEditing((prev) => ({ ...prev, value: e.target.value }))
-            }
-            autoFocus
-          />
-        </Modal>
-      )}
+        <div style={{ textAlign: "center", marginBottom: 24, color: "#888" }}>
+          Обновление через: {countdown} секунд
+        </div>
+
+        {isLoading && !error && (
+          <div style={{ textAlign: "center", padding: 100 }}>
+            <Spin size="large" />
+          </div>
+        )}
+
+        {error && (
+          <Title level={4} type="danger" style={{ textAlign: "center" }}>
+            {error}
+          </Title>
+        )}
+
+        {!isLoading && !error && (
+          <Card
+            style={{
+              width: "100%",
+              margin: 0,
+              border: "none",
+              boxShadow: "none",
+            }}
+          >
+            <Table
+              columns={columns}
+              dataSource={filteredData}
+              bordered
+              scroll={{ x: true }}
+              pagination={{ pageSize: 10, showSizeChanger: false }}
+              size="middle"
+              tableLayout="fixed"
+              rowClassName={(record, index) =>
+                newGuids.includes(record.key)
+                  ? "tn-new"
+                  : index % 2 === 0
+                  ? "row-light"
+                  : ""
+              }
+              expandable={{
+                expandedRowRender: (record) => {
+                  const hideFields = new Set([
+                    "documentId",
+                    "updatedAt",
+                    "createdAt",
+                    "publishedAt",
+                    "id",
+                    "SBYT_NOTIFICATION",
+                    "SBYT_NOTIFICATION_STR",
+                    "guid",
+                    "OBJECTNAMEKEY",
+                    "SWITCHNAMEKEY",
+                    "VIOLATION_GUID_STR",
+                  ]);
+                  const entries = Object.entries(record.full).filter(
+                    ([k]) => !hideFields.has(k)
+                  );
+                  return (
+                    <Card
+                      size="small"
+                      style={{ margin: 0, padding: 16, background: "#fafafa" }}
+                      bodyStyle={{ padding: 0 }}
+                    >
+                      <Descriptions
+                        size="small"
+                        column={2}
+                        bordered={false}
+                        labelStyle={{ fontWeight: 600, color: "#fa8c16" }}
+                        contentStyle={{ paddingLeft: 8 }}
+                        items={entries.map(([k, v]) => {
+                          const label =
+                            v && typeof v === "object" && "label" in v
+                              ? v.label
+                              : k;
+                          let rawVal =
+                            v == null
+                              ? null
+                              : typeof v === "object" && "value" in v
+                              ? v.value
+                              : v;
+                          const isEditable =
+                            v && typeof v === "object" && v.edit === "Да";
+                          let display = "Нет данных";
+                          if (rawVal != null && rawVal !== "") {
+                            display = String(rawVal);
+                            if (
+                              typeof rawVal === "string" &&
+                              /\d{4}-\d{2}-\d{2}T/.test(rawVal)
+                            ) {
+                              display = dayjs(rawVal).format(
+                                "DD.MM.YYYY HH:mm:ss"
+                              );
+                            }
+                          }
+                          return {
+                            key: k,
+                            label,
+                            children: (
+                              <span>
+                                {display}
+                                {isEditable && !isSuper && (
+                                  <EditOutlined
+                                    style={{
+                                      color: "#52c41a",
+                                      marginLeft: 8,
+                                      cursor: "pointer",
+                                    }}
+                                    onClick={() =>
+                                      setEditing({
+                                        recordKey: record.key,
+                                        documentId: record.full.documentId,
+                                        fieldKey: k,
+                                        label,
+                                        value: display,
+                                      })
+                                    }
+                                  />
+                                )}
+                              </span>
+                            ),
+                          };
+                        })}
+                      />
+                    </Card>
+                  );
+                },
+                rowExpandable: () => true,
+                expandedRowKeys: expandedKeys,
+                onExpand: (expanded, record) => {
+                  setExpandedKeys(expanded ? [record.key] : []);
+                },
+              }}
+            />
+          </Card>
+        )}
+
+        {editing && (
+          <Modal
+            title={editing.label}
+            open
+            onCancel={() => setEditing(null)}
+            onOk={handleSaveEdit}
+            okText="Сохранить"
+            cancelText="Отмена"
+          >
+            <Input
+              value={editing.value}
+              onChange={(e) =>
+                setEditing((prev) => ({ ...prev, value: e.target.value }))
+              }
+              autoFocus
+            />
+          </Modal>
+        )}
       </div>
     );
   }

@@ -16,7 +16,7 @@
 
 "use server";
 import React from "react";
-import MainContent from "@/components/MainContent/MainContent";
+import MainContent from "../app/main/page";
 import { auth } from "@/config/auth";
 
 export default async function Home() {
