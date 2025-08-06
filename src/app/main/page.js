@@ -1,7 +1,6 @@
 "use client";
 
 import "@/app/globals.css";
-
 import { useEffect, useMemo, useState } from "react";
 import {
   Table,
@@ -13,6 +12,10 @@ import {
   Input,
   message,
   Button,
+  Select,
+  Row,
+  Col,
+  Space,
 } from "antd";
 import { EditOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
@@ -22,23 +25,34 @@ import { useSession } from "next-auth/react";
 import { useDashboardTestStore } from "@/stores/dashboardTestStore";
 
 const { Title } = Typography;
+const { Option } = Select;
 
 const val = (obj) =>
   typeof obj === "object" && obj !== null && "value" in obj ? obj.value : obj;
-
 const formatDate = (d) => (d ? dayjs(d).format("DD.MM.YYYY HH:mm:ss") : "—");
 
 export default function MainPage() {
   const { data: session, status } = useSession();
   const token = session?.user?.jwt ?? null;
-
   const { uniqueOpen, isLoading, error, loadUnique } = useDashboardTestStore();
 
   const [countdown, setCountdown] = useState(60);
   const [expandedKeys, setExpandedKeys] = useState([]);
   const [editing, setEditing] = useState(null);
 
-  // save edited field via Strapi and refresh table
+  // filters state
+  const [filters, setFilters] = useState({
+    OWN_SCNAME: "Все",
+    SCNAME: "Все",
+    VIOLATION_TYPE: "Все",
+    OBJECTTYPE81: "Все",
+    F81_060_EVENTDATETIME: "Все",
+    CREATE_DATETIME: "Все",
+    F81_070_RESTOR_SUPPLAYDATETIME: "Все",
+    F81_290_RECOVERYDATETIME: "Все",
+  });
+
+  // perform PUT and reload data
   const handleSaveEdit = async () => {
     if (!editing) return;
     const { documentId, fieldKey, value } = editing;
@@ -65,6 +79,7 @@ export default function MainPage() {
     }
   };
 
+  // countdown effect (pause when detail expanded or editing)
   useEffect(() => {
     const timer = setInterval(() => {
       setCountdown((prev) => {
@@ -79,19 +94,25 @@ export default function MainPage() {
     return () => clearInterval(timer);
   }, [expandedKeys, editing]);
 
-  
+  // initial load
   useEffect(() => {
     if (status === "authenticated" && uniqueOpen.length === 0) {
       loadUnique(token);
     }
   }, [status, token, uniqueOpen.length, loadUnique]);
 
-  const sorted = [...uniqueOpen].sort(
-    (a, b) =>
-      new Date(val(b.F81_060_EVENTDATETIME) || b.createdAt) -
-      new Date(val(a.F81_060_EVENTDATETIME) || a.createdAt)
+  // sort by event datetime descending
+  const sorted = useMemo(
+    () =>
+      [...uniqueOpen].sort(
+        (a, b) =>
+          new Date(val(b.F81_060_EVENTDATETIME) || b.createdAt) -
+          new Date(val(a.F81_060_EVENTDATETIME) || a.createdAt)
+      ),
+    [uniqueOpen]
   );
 
+  // transform into table data
   const dataSource = useMemo(
     () =>
       sorted.map((r) => ({
@@ -104,40 +125,199 @@ export default function MainPage() {
         full: r,
         documentId: r.documentId,
       })),
-    [uniqueOpen]
+    [sorted]
+  );
+
+  // compute unique options for each filter
+  const filterOptions = useMemo(() => {
+    const o = {};
+    ["OWN_SCNAME", "SCNAME", "VIOLATION_TYPE", "OBJECTTYPE81"].forEach(
+      (key) => {
+        o[key] = Array.from(
+          new Set(uniqueOpen.map((r) => val(r[key])).filter(Boolean))
+        );
+      }
+    );
+    // date options: format date part
+    [
+      "F81_060_EVENTDATETIME",
+      "CREATE_DATETIME",
+      "F81_070_RESTOR_SUPPLAYDATETIME",
+      "F81_290_RECOVERYDATETIME",
+    ].forEach((key) => {
+      o[key] = Array.from(
+        new Set(
+          uniqueOpen
+            .map((r) => val(r[key]))
+            .filter(Boolean)
+            .map((d) => dayjs(d).format("DD.MM.YYYY"))
+        )
+      );
+    });
+    return o;
+  }, [uniqueOpen]);
+
+  // apply all filters
+  const filteredData = useMemo(
+    () =>
+      dataSource.filter((item) => {
+        const r = item.full;
+        // string filters
+        if (
+          filters.OWN_SCNAME !== "Все" &&
+          val(r.OWN_SCNAME) !== filters.OWN_SCNAME
+        )
+          return false;
+        if (
+          filters.SCNAME !== "Все" &&
+          val(r.SCNAME) !== filters.SCNAME
+        )
+          return false;
+        if (
+          filters.VIOLATION_TYPE !== "Все" &&
+          val(r.VIOLATION_TYPE) !== filters.VIOLATION_TYPE
+        )
+          return false;
+        if (
+          filters.OBJECTTYPE81 !== "Все" &&
+          val(r.OBJECTTYPE81) !== filters.OBJECTTYPE81
+        )
+          return false;
+        // date filters (compare date part)
+        const dt = (key) =>
+          val(r[key]) ? dayjs(val(r[key])).format("DD.MM.YYYY") : null;
+        if (
+          filters.F81_060_EVENTDATETIME !== "Все" &&
+          dt("F81_060_EVENTDATETIME") !== filters.F81_060_EVENTDATETIME
+        )
+          return false;
+        if (
+          filters.CREATE_DATETIME !== "Все" &&
+          dt("CREATE_DATETIME") !== filters.CREATE_DATETIME
+        )
+          return false;
+        if (
+          filters.F81_070_RESTOR_SUPPLAYDATETIME !== "Все" &&
+          dt("F81_070_RESTOR_SUPPLAYDATETIME") !==
+            filters.F81_070_RESTOR_SUPPLAYDATETIME
+        )
+          return false;
+        if (
+          filters.F81_290_RECOVERYDATETIME !== "Все" &&
+          dt("F81_290_RECOVERYDATETIME") !== filters.F81_290_RECOVERYDATETIME
+        )
+          return false;
+        return true;
+      }),
+    [dataSource, filters]
   );
 
   const columns = [
     { title: "№ ТН", dataIndex: "number", key: "number", width: 120 },
     { title: "Объект", dataIndex: "object", key: "object", responsive: ["md"] },
-    {
-      title: "Адрес",
-      dataIndex: "address",
-      key: "address",
-      responsive: ["lg"],
-    },
-    {
-      title: "Дисп. центр",
-      dataIndex: "center",
-      key: "center",
-      width: 160,
-      responsive: ["md"],
-    },
-    {
-      title: "Дата/время возникновения",
-      dataIndex: "event",
-      key: "event",
-      width: 180,
-    },
+    { title: "Адрес", dataIndex: "address", key: "address", responsive: ["lg"] },
+    { title: "Дисп. центр", dataIndex: "center", key: "center", width: 160, responsive: ["md"] },
+    { title: "Дата/время возникновения", dataIndex: "event", key: "event", width: 180 },
   ];
 
   return (
-    <div style={{ padding: 24, maxWidth: 1400, margin: "0 auto" }}>
-      <Title level={3} style={{ textAlign: "center", marginBottom: 24 }}>
+    <div style={{ padding: 24, width: "100%", margin: "0" }}>
+      <Title level={3} style={{ textAlign: "center", marginBottom: 16 }}>
         {`Всего открытых ТН: ${uniqueOpen.length}`}
       </Title>
+
+      <Row justify="center" style={{ marginBottom: 16 }}>
+        <Space wrap size="middle">
+          <Button>Дашборд</Button>
+          <Button onClick={() => loadUnique(token)}>Обновить</Button>
+          <Button
+            onClick={() =>
+              setFilters({
+                OWN_SCNAME: "Все",
+                SCNAME: "Все",
+                VIOLATION_TYPE: "Все",
+                OBJECTTYPE81: "Все",
+                F81_060_EVENTDATETIME: "Все",
+                CREATE_DATETIME: "Все",
+                F81_070_RESTOR_SUPPLAYDATETIME: "Все",
+                F81_290_RECOVERYDATETIME: "Все",
+              })
+            }
+          >
+            Сбросить фильтры
+          </Button>
+          <Button>AI‑Аналитика</Button>
+        </Space>
+      </Row>
+
+      {/* <Title
+        level={4}
+        style={{ textAlign: "left", marginBottom: 8, marginTop: 16 }}
+      >
+        Фильтры
+      </Title> */}
+
+      {/* Filter bar */}
+      <Card
+        size="small"
+        style={{ width: "100%", margin: 0, padding: 16 }}
+      >
+        <Row gutter={[12, 12]} wrap>
+          {/* Select filters */}
+          {[
+            { key: "OWN_SCNAME", label: "Филиал" },
+            { key: "SCNAME", label: "Произв. отделение" },
+            { key: "VIOLATION_TYPE", label: "Вид ТН" },
+            { key: "OBJECTTYPE81", label: "Вид объекта" },
+          ].map(({ key, label }) => (
+            <Col xs={24} sm={12} md={6} key={key}>
+              <div style={{ marginBottom: 4, fontWeight: "500" }}>{label}</div>
+              <Select
+                style={{ width: "100%" }}
+                placeholder={label}
+                value={filters[key]}
+                onChange={(v) => setFilters((f) => ({ ...f, [key]: v }))}
+              >
+                <Option value="Все">Все</Option>
+                {filterOptions[key].map((opt) => (
+                  <Option key={opt} value={opt}>
+                    {opt}
+                  </Option>
+                ))}
+              </Select>
+            </Col>
+          ))}
+
+          {/* Date filters */}
+          {[
+            { key: "F81_060_EVENTDATETIME", label: "Дата возникновения" },
+            { key: "CREATE_DATETIME", label: "Дата фиксирования" },
+            { key: "F81_070_RESTOR_SUPPLAYDATETIME", label: "Дата восстановления (план)" },
+            { key: "F81_290_RECOVERYDATETIME", label: "Дата восстановления (факт)" },
+          ].map(({ key, label }) => (
+            <Col xs={24} sm={12} md={6} key={key}>
+              <div style={{ marginBottom: 4, fontWeight: "500" }}>{label}</div>
+              <Select
+                style={{ width: "100%" }}
+                placeholder={label}
+                value={filters[key]}
+                onChange={(v) => setFilters((f) => ({ ...f, [key]: v }))}
+              >
+                <Option value="Все">Все</Option>
+                {filterOptions[key].map((opt) => (
+                  <Option key={opt} value={opt}>
+                    {opt}
+                  </Option>
+                ))}
+              </Select>
+            </Col>
+          ))}
+        </Row>
+      </Card>
+
+      {/* Countdown timer */}
       <div style={{ textAlign: "center", marginBottom: 24, color: "#888" }}>
-        Обновление через: {countdown} секунд(ы)
+        Обновление через: {countdown} секунд
       </div>
 
       {isLoading && !error && (
@@ -153,17 +333,14 @@ export default function MainPage() {
       )}
 
       {!isLoading && !error && (
-        <Card
-          style={{ borderRadius: 16, boxShadow: "0 8px 18px rgba(0,0,0,0.05)" }}
-        >
+        <Card style={{ width: "100%", margin: 0, border: "none", boxShadow: "none" }}>
           <Table
             columns={columns}
-            dataSource={dataSource}
+            dataSource={filteredData}
             bordered
+            scroll={{ x: true }}
             pagination={{ pageSize: 10, showSizeChanger: false }}
-            rowClassName={(record, index) =>
-              index % 2 === 0 ? "row-light" : ""
-            }
+            rowClassName={(record, index) => (index % 2 === 0 ? "row-light" : "")}
             expandable={{
               expandedRowRender: (record) => {
                 const hideFields = new Set([
@@ -183,10 +360,7 @@ export default function MainPage() {
                   ([k]) => !hideFields.has(k)
                 );
                 return (
-                  <Descriptions
-                    size="small"
-                    column={1}
-                    bordered
+                  <Descriptions size="small" column={1} bordered
                     items={entries.map(([k, v]) => {
                       const label =
                         v && typeof v === "object" && "label" in v
@@ -203,7 +377,10 @@ export default function MainPage() {
                       let display = "Нет данных";
                       if (rawVal != null && rawVal !== "") {
                         display = String(rawVal);
-                        if (typeof rawVal === "string" && /\d{4}-\d{2}-\d{2}T/.test(rawVal)) {
+                        if (
+                          typeof rawVal === "string" &&
+                          /\d{4}-\d{2}-\d{2}T/.test(rawVal)
+                        ) {
                           display = dayjs(rawVal).format("DD.MM.YYYY HH:mm:ss");
                         }
                       }
@@ -223,7 +400,6 @@ export default function MainPage() {
                                     fieldKey: k,
                                     label,
                                     value: display,
-                                    previousValue: display,
                                   })
                                 }
                               />
@@ -241,7 +417,6 @@ export default function MainPage() {
                 setExpandedKeys(expanded ? [record.key] : []);
               },
             }}
-            scroll={{ x: true }}
           />
         </Card>
       )}
