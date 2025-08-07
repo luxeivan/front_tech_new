@@ -50,10 +50,9 @@ export default function MainPage() {
   const token = session?.user?.jwt ?? null;
   const { uniqueOpen, isLoading, error, loadUnique } = useDashboardTestStore();
   const newGuids = useDashboardTestStore(state => state.newGuids);
-
+  const handleEvent = useDashboardTestStore(state => state.handleEvent);
   const [expandedKeys, setExpandedKeys] = useState([]);
   const [editing, setEditing] = useState(null);
-
   const [filters, setFilters] = useState({
     OWN_SCNAME: "Все",
     SCNAME: "Все",
@@ -91,12 +90,17 @@ export default function MainPage() {
     }
   };
 
-  // SSE reload effect
+
   useEffect(() => {
     if (status === "authenticated") {
       const es = new EventSource("/api/event");
-      es.onmessage = () => {
-        loadUnique(token);
+      es.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          handleEvent(data);
+        } catch (err) {
+          console.error("Ошибка разбора SSE-сообщения:", err);
+        }
       };
       es.onerror = (err) => {
         console.error("SSE error:", err);
@@ -104,7 +108,7 @@ export default function MainPage() {
       };
       return () => es.close();
     }
-  }, [status, token, loadUnique]);
+  }, [status, handleEvent]);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -128,7 +132,6 @@ export default function MainPage() {
     [uniqueOpen]
   );
 
-  // transform into table data
   const dataSource = useMemo(
     () =>
       sorted.map((r) => ({
@@ -144,7 +147,6 @@ export default function MainPage() {
     [sorted]
   );
 
-  // compute unique options for each filter
   const filterOptions = useMemo(() => {
     const o = {};
     ["OWN_SCNAME", "SCNAME", "VIOLATION_TYPE", "OBJECTTYPE81"].forEach(
@@ -173,12 +175,11 @@ export default function MainPage() {
     return o;
   }, [uniqueOpen]);
 
-  // apply all filters
   const filteredData = useMemo(
     () =>
       dataSource.filter((item) => {
         const r = item.full;
-        // string filters
+
         if (
           filters.OWN_SCNAME !== "Все" &&
           val(r.OWN_SCNAME) !== filters.OWN_SCNAME
@@ -283,6 +284,7 @@ export default function MainPage() {
       width: 180,
     },
   ];
+  
   const columns = rawColumns.map((col) => ({
     ...col,
     align: "center",

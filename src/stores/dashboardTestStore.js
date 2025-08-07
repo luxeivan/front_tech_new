@@ -57,6 +57,38 @@ export const useDashboardTestStore = create(
       error: null,
       newGuids: [],
 
+      // Обработка SSE-события: добавляем новый открытый ТН без полной перезагрузки
+      handleEvent: (payload) => {
+        try {
+          // работаем только с ТН
+          if (payload.model !== "api::tn.tn") return;
+          // интересуют только создание и публикация
+          if (!["entry.create", "entry.publish"].includes(payload.event)) return;
+          const entry = payload.entry;
+          // получаем GUID
+          const g = (
+            entry.VIOLATION_GUID_STR?.value ??
+            entry.VIOLATION_GUID_STR
+          )?.trim()?.toUpperCase();
+          if (!g) return;
+          set((state) => {
+            // если ТН уже есть, ничего не делаем
+            if (state.uniqueOpen.some((r) => r.guid === g)) return {};
+            // добавляем новый ТН
+            const rec = { ...entry, guid: g };
+            return {
+              uniqueOpen: [rec, ...state.uniqueOpen],
+              newGuids: [...state.newGuids, g],
+            };
+          });
+          // звук и очистка подсветки
+          new Audio("/sounds/sound.mp3").play().catch(() => {});
+          setTimeout(() => set({ newGuids: [] }), 30000);
+        } catch (e) {
+          console.error("DashboardTestStore.handleEvent", e);
+        }
+      },
+
       async loadUnique(token) {
         try {
           set({ isLoading: true, error: null });

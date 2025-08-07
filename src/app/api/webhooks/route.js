@@ -11,12 +11,18 @@ export async function POST(request) {
     console.log("📦 Полезная нагрузка:", JSON.stringify(payload, null, 2));
 
     // фильтрация: обрабатываем только записи контента ТН
-    // if (payload.model !== "api::tn.tn") {
-    //   console.log("⚠️ Вебхук: это не ТН, пропускаем");
-    //   return NextResponse.json({ skipped: true }, { status: 200 });
-    // }
+    if (payload.model !== "api::tn.tn") {
+      console.log("⚠️ Вебхук: это не ТН, пропускаем");
+      return NextResponse.json({ skipped: true }, { status: 200 });
+    }
     console.log("🔍 Вебхук: модель записи =", payload.model);
     console.log("✔️ ТН событие:", payload.event);
+
+    // фильтрация по типу события: только создание записи
+    if (payload.event !== "entry.create") {
+      console.log(`ℹ️ Вебхук: событие ${payload.event} пропускаем`);
+      return NextResponse.json({ skipped: true }, { status: 200 });
+    }
 
     // 🔔 Рассылаем новое событие всем SSE-клиентам
     for (const [clientId, writer] of clients) {
