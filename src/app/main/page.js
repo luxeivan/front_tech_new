@@ -476,9 +476,11 @@ export default function MainPage() {
                   );
                   return (
                     <>
-                      <div style={{ marginBottom: 16, textAlign: "center" }}>
-                        <SendButtons tn={record.full} updateField={handleSaveEdit} />
-                      </div>
+                      {!isSuper && (
+                        <div style={{ marginBottom: 16, textAlign: "center" }}>
+                          <SendButtons tn={record.full} updateField={handleSaveEdit} />
+                        </div>
+                      )}
                       <Card
                         size="small"
                         style={{ margin: 0, padding: 16, background: "#fafafa" }}
