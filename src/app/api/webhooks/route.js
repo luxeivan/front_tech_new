@@ -10,16 +10,16 @@ export async function POST(request) {
     console.log("📬 Вебхук: получен POST-запрос от Strapi");
     console.log("📦 Полезная нагрузка:", JSON.stringify(payload, null, 2));
 
-    // фильтрация: обрабатываем только записи контента ТН
-    if (payload.model !== "api::tn.tn") {
+    // проверяем UID контента, чтобы обрабатывать только события ТН
+    if (payload.uid !== "api::tn.tn") {
       console.log("⚠️ Вебхук: это не ТН, пропускаем");
       return NextResponse.json({ skipped: true }, { status: 200 });
     }
     console.log("🔍 Вебхук: модель записи =", payload.model);
     console.log("✔️ ТН событие:", payload.event);
 
-    // фильтрация по типу события: только создание записи
-    if (payload.event !== "entry.create") {
+    // фильтрация по типу события: только создание или публикация записи
+    if (!["entry.create", "entry.publish"].includes(payload.event)) {
       console.log(`ℹ️ Вебхук: событие ${payload.event} пропускаем`);
       return NextResponse.json({ skipped: true }, { status: 200 });
     }
