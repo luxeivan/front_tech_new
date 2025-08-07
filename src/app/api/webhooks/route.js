@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { clients } from '@/app/api/event/route';
 
 // API-роут для приема уведомлений от вебхуков Strapi
 export async function POST(request) {
@@ -10,11 +11,18 @@ export async function POST(request) {
     console.log("📦 Полезная нагрузка:", JSON.stringify(payload, null, 2));
 
     // фильтрация: обрабатываем только записи контента ТН
-    if (payload.model !== "api::tn.tn") {
-      console.log("⚠️ Вебхук: это не ТН, пропускаем");
-      return NextResponse.json({ skipped: true }, { status: 200 });
-    }
+    // if (payload.model !== "api::tn.tn") {
+    //   console.log("⚠️ Вебхук: это не ТН, пропускаем");
+    //   return NextResponse.json({ skipped: true }, { status: 200 });
+    // }
+    console.log("🔍 Вебхук: модель записи =", payload.model);
     console.log("✔️ ТН событие:", payload.event);
+
+    // 🔔 Рассылаем новое событие всем SSE-клиентам
+    for (const [clientId, writer] of clients) {
+      writer.write(`event: message\n`);
+      writer.write(`data: ${JSON.stringify(payload)}\n\n`);
+    }
 
     return NextResponse.json(
       { message: "Вебхук успешно принят" },
