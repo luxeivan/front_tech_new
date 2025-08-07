@@ -8,6 +8,14 @@ export async function POST(request) {
     // Логируем успешное получение вебхука
     console.log("📬 Вебхук: получен POST-запрос от Strapi");
     console.log("📦 Полезная нагрузка:", JSON.stringify(payload, null, 2));
+
+    // фильтрация: обрабатываем только записи контента ТН
+    if (payload.model !== "api::tn.tn") {
+      console.log("⚠️ Вебхук: это не ТН, пропускаем");
+      return NextResponse.json({ skipped: true }, { status: 200 });
+    }
+    console.log("✔️ ТН событие:", payload.event);
+
     return NextResponse.json(
       { message: "Вебхук успешно принят" },
       { status: 200 }
