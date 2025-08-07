@@ -131,13 +131,6 @@ export const useDashboardTestStore = create(
           const uniqueOpen = [...map.values()].filter(
             (rec) => !otherGuids.has(rec.guid)
           );
-          const prevGuids = get().uniqueOpen.map(item => item.guid);
-          const newGuidList = uniqueOpen.map(u => u.guid).filter(g => !prevGuids.includes(g));
-          if (newGuidList.length) {
-            set({ newGuids: newGuidList });
-            new Audio("/sounds/sound.mp3").play().catch(() => {});
-            setTimeout(() => set({ newGuids: [] }), 30000);
-          }
           set({ uniqueOpen, isLoading: false });
         } catch (e) {
           console.error("DashboardTestStore.loadUnique", e);
