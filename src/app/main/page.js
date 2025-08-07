@@ -51,7 +51,6 @@ export default function MainPage() {
   const { uniqueOpen, isLoading, error, loadUnique } = useDashboardTestStore();
   const newGuids = useDashboardTestStore(state => state.newGuids);
 
-  const [countdown, setCountdown] = useState(60);
   const [expandedKeys, setExpandedKeys] = useState([]);
   const [editing, setEditing] = useState(null);
 
@@ -92,19 +91,20 @@ export default function MainPage() {
     }
   };
 
+  // SSE reload effect
   useEffect(() => {
-    const timer = setInterval(() => {
-      setCountdown((prev) => {
-        if (expandedKeys.length > 0 || editing || isLoading) return prev;
-        if (prev <= 1) {
-          window.location.reload();
-          return 60;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [expandedKeys, editing, isLoading]);
+    if (status === "authenticated") {
+      const es = new EventSource("/api/event");
+      es.onmessage = () => {
+        loadUnique(token);
+      };
+      es.onerror = (err) => {
+        console.error("SSE error:", err);
+        es.close();
+      };
+      return () => es.close();
+    }
+  }, [status, token, loadUnique]);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -321,14 +321,6 @@ export default function MainPage() {
               Дашборд
             </Button>
             <Button
-              onClick={() => {
-                setCountdown(60);
-                loadUnique(token);
-              }}
-            >
-              Обновить
-            </Button>
-            <Button
               onClick={() =>
                 setFilters({
                   OWN_SCNAME: "Все",
@@ -416,9 +408,7 @@ export default function MainPage() {
           </Row>
         </Card>
 
-        <div style={{ textAlign: "center", marginBottom: 24, color: "#888" }}>
-          Обновление через: {countdown} секунд
-        </div>
+
 
         {isLoading && !error && (
           <div style={{ textAlign: "center", padding: 100 }}>
