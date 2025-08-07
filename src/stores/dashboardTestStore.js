@@ -50,7 +50,6 @@ const getGuid = (item) =>
 
 export const useDashboardTestStore = create(
   persist(
-    // core store with get() available for loadUnique
     (set, get) => ({
       uniqueOpen: [],
       isLoading: false,
@@ -61,7 +60,7 @@ export const useDashboardTestStore = create(
       handleEvent: (payload) => {
         try {
           // работаем только с ТН
-          if (payload.model !== "api::tn.tn") return;
+          if (payload.uid !== "api::tn.tn") return;
           // интересуют только создание и публикация
           if (!["entry.create", "entry.publish"].includes(payload.event)) return;
           const entry = payload.entry;
@@ -89,18 +88,19 @@ export const useDashboardTestStore = create(
         }
       },
 
+      // Полная загрузка уникальных открытых ТН
       async loadUnique(token) {
         try {
           set({ isLoading: true, error: null });
 
-          // «открытые» — берём полностью (все поля)
+          // «открытые» — берём полностью
           const openFull = await fetchTns({
             token,
             statusValue: "открыта",
             full: true,
           });
 
-          // прочие статусы — достаточно GUID-ов
+          // остальные статусы — только GUID
           const [powered, closed, all] = await Promise.all([
             fetchTns({ token, statusValue: "запитана" }),
             fetchTns({ token, statusValue: "закрыта" }),
@@ -121,7 +121,7 @@ export const useDashboardTestStore = create(
               .filter(Boolean),
           ]);
 
-          /* dedup + attach guid */
+          // dedup + attach guid
           const map = new Map();
           openFull.forEach((rec) => {
             const g = getGuid(rec);
@@ -143,7 +143,7 @@ export const useDashboardTestStore = create(
     }),
     {
       name: "dashboard-test-cache",
-      partialize: (s) => ({ uniqueOpen: s.uniqueOpen }),
+      partialize: (state) => ({ uniqueOpen: state.uniqueOpen }),
     }
   )
 );
