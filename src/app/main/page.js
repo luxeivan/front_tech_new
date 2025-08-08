@@ -50,10 +50,15 @@ export default function MainPage() {
   const token = session?.user?.jwt ?? null;
 
   const { uniqueOpen, isLoading, error, loadUnique } = useDashboardTestStore();
-  const newGuids = useDashboardTestStore((s) => s.newGuids);
-  const handleEvent = useDashboardTestStore((s) => s.handleEvent);
-  const lastSyncAt = useDashboardTestStore((s) => s.lastSyncAt);
-  const isCacheExpired = useDashboardTestStore((s) => s.isCacheExpired);
+  const newGuids = useDashboardTestStore((state) => state.newGuids);
+  const handleEvent = useDashboardTestStore((state) => state.handleEvent);
+
+  // звук: состояние и экшены из стора
+  const soundEnabled = useDashboardTestStore((s) => s.soundEnabled);
+  const audioUnlocked = useDashboardTestStore((s) => s.audioUnlocked);
+  const enableSound = useDashboardTestStore((s) => s.enableSound);
+  const disableSound = useDashboardTestStore((s) => s.disableSound);
+  const soundOn = soundEnabled && audioUnlocked;
 
   const [expandedKeys, setExpandedKeys] = useState([]);
   const [editing, setEditing] = useState(null);
@@ -94,7 +99,6 @@ export default function MainPage() {
     }
   };
 
-  // Подписка на SSE
   useEffect(() => {
     if (status === "authenticated") {
       const es = new EventSource("/api/event");
@@ -114,28 +118,17 @@ export default function MainPage() {
     }
   }, [status, handleEvent]);
 
-  // Редирект неавторизованных
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/login");
     }
   }, [status, router]);
 
-  // Первичная загрузка + авто-обновление при протухшем кэше
   useEffect(() => {
-    if (status === "authenticated") {
-      if (uniqueOpen.length === 0 || isCacheExpired()) {
-        loadUnique(token);
-      }
+    if (status === "authenticated" && uniqueOpen.length === 0) {
+      loadUnique(token);
     }
-  }, [
-    status,
-    token,
-    uniqueOpen.length,
-    lastSyncAt,
-    isCacheExpired,
-    loadUnique,
-  ]);
+  }, [status, token, uniqueOpen.length, loadUnique]);
 
   const sorted = useMemo(
     () =>
@@ -211,6 +204,7 @@ export default function MainPage() {
           val(r.OBJECTTYPE81) !== filters.OBJECTTYPE81
         )
           return false;
+
         const dt = (key) =>
           val(r[key]) ? dayjs(val(r[key])).format("DD.MM.YYYY") : null;
         if (
@@ -225,7 +219,7 @@ export default function MainPage() {
           return false;
         if (
           filters.F81_070_RESTOR_SUPPLAYDATETIME !== "Все" &&
-          dt("F81_070_RESTOR_SUPPLAYДАТETIME") !==
+          dt("F81_070_RESTOR_SUPPLAYDATETIME") !==
             filters.F81_070_RESTOR_SUPPLAYDATETIME
         )
           return false;
@@ -356,11 +350,20 @@ export default function MainPage() {
             >
               AI-Аналитика
             </Button>
+
+            {/* Переключатель звука */}
+            <Button
+              type={soundOn ? "primary" : "default"}
+              onClick={() => (soundOn ? disableSound() : enableSound())}
+            >
+              {soundOn ? "🔔 Звук: Вкл" : "🔕 Звук: Выкл"}
+            </Button>
           </Space>
         </Row>
 
         <Card size="small" style={{ width: "100%", margin: 0, padding: 16 }}>
           <Row gutter={[12, 12]} wrap>
+            {/* Select filters */}
             {[
               { key: "OWN_SCNAME", label: "Филиал" },
               { key: "SCNAME", label: "Произв. отделение" },
@@ -387,6 +390,7 @@ export default function MainPage() {
               </Col>
             ))}
 
+            {/* Date filters */}
             {[
               { key: "F81_060_EVENTDATETIME", label: "Дата возникновения" },
               { key: "CREATE_DATETIME", label: "Дата фиксирования" },
