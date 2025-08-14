@@ -87,12 +87,14 @@ export async function POST(req) {
         console.log("!!!!!!!!!!", soId);
         soComponents.push({ SocialObjects: soId });
       }
-
+      
       if (soComponents.length) {
         tnData[SO_COMP_KEY] = soComponents;
       }
-
+      
       // создаём/сохраняем ТН
+      console.log("tnData", tnData);
+      
       const tnId = await strapiReq("POST", "/api/tns", { data: tnData }, auth);
       results.push({ id: tnId });
       logBlock("TN created", { tnId, soCount: soComponents.length });

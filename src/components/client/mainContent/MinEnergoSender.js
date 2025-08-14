@@ -176,8 +176,8 @@ export default function MinEnergoSender({ tn, updateField, open, onClose }) {
     const pad = (n) => String(n).padStart(2, "0");
     return withTime
       ? `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(
-          d.getHours()
-        )}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+        d.getHours()
+      )}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
       : `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   };
 
@@ -216,42 +216,42 @@ export default function MinEnergoSender({ tn, updateField, open, onClose }) {
     };
 
     const Involveforces = {
-      Involved_brigades: clean(
+      involved_brigades: clean(
         draft.BRIGADECOUNT !== "—" ? draft.BRIGADECOUNT : tn.BRIGADECOUNT?.value
       ),
-      Involved_workers: clean(
+      involved_workers: clean(
         draft.EMPLOYEECOUNT !== "—"
           ? draft.EMPLOYEECOUNT
           : tn.EMPLOYEECOUNT?.value
       ),
-      Involved_equipment: clean(
+      involved_equipment: clean(
         draft.SPECIALTECHNIQUECOUNT !== "—"
           ? draft.SPECIALTECHNIQUECOUNT
           : tn.SPECIALTECHNIQUECOUNT?.value
       ),
-      Involved_emergency_power_supply: clean(
+      involved_emergency_power_supply: clean(
         draft.PES_COUNT !== "—" ? draft.PES_COUNT : tn.PES_COUNT?.value
       ),
     };
 
     // Блок «Потребности» (Required_forces)
     const Requiredforces = {
-      Required_brigades: valOrZero(
+      required_brigades: valOrZero(
         draft.need_brigade_count !== "—"
           ? draft.need_brigade_count
           : tn.need_brigade_count?.value
       ),
-      Required_workers: valOrZero(
+      required_workers: valOrZero(
         draft.need_person_count !== "—"
           ? draft.need_person_count
           : tn.need_person_count?.value
       ),
-      Required_equipment: valOrZero(
+      required_equipment: valOrZero(
         draft.need_equipment_count !== "—"
           ? draft.need_equipment_count
           : tn.need_equipment_count?.value
       ),
-      Required_emergency_power_supply: valOrZero(
+      required_emergency_power_supply: valOrZero(
         draft.need_reserve_power_source_count !== "—"
           ? draft.need_reserve_power_source_count
           : tn.need_reserve_power_source_count?.value
@@ -263,12 +263,12 @@ export default function MinEnergoSender({ tn, updateField, open, onClose }) {
       incident_id: draft.VIOLATION_GUID_STR || tn.VIOLATION_GUID_STR || null,
       type: TYPE_MAP.hasOwnProperty(draft.VIOLATION_TYPE)
         ? TYPE_MAP[draft.VIOLATION_TYPE]
-        : null,
+        : 1,
       status:
         STATUS_NAME_MAP[
-          (draft.STATUS_NAME || "").trim().replace(/^./, (c) => c.toUpperCase())
+        (draft.STATUS_NAME || "").trim().replace(/^./, (c) => c.toUpperCase())
         ] || null,
-      plan_date_close: toDate(draft.F81_070_RESTOR_SUPPLAYDATETIME),
+      plan_date_close: toDate(draft.F81_070_RESTOR_SUPPLAYDATETIME, true),
       count_people:
         draft.POPULATION_COUNT !== "—" ? draft.POPULATION_COUNT : null,
       fio_response_work: draft.CREATE_USER !== "—" ? draft.CREATE_USER : null,
@@ -279,34 +279,34 @@ export default function MinEnergoSender({ tn, updateField, open, onClose }) {
       resources: [5],
       house_objects: houseObjects,
       snt_objects: [
-        { fias: "Данных нет, будут позже", name: "Данных нет, будут позже" },
+        // { fias: "Данных нет, будут позже", name: "Данных нет, будут позже" },
       ],
       school_objects: [
-        { fias: "Данных нет, будут позже", name: "Данных нет, будут позже" },
+        // { fias: "Данных нет, будут позже", name: "Данных нет, будут позже" },
       ],
       kindergarten_objects: [
-        { fias: "Данных нет, будут позже", name: "Данных нет, будут позже" },
+        // { fias: "Данных нет, будут позже", name: "Данных нет, будут позже" },
       ],
       hospital_objects: [
-        { fias: "Данных нет, будут позже", name: "Данных нет, будут позже" },
+        // { fias: "Данных нет, будут позже", name: "Данных нет, будут позже" },
       ],
       polyclinic_objects: [
-        { fias: "Данных нет, будут позже", name: "Данных нет, будут позже" },
+        // { fias: "Данных нет, будут позже", name: "Данных нет, будут позже" },
       ],
       boiler_room_objects: [
-        { fias: "Данных нет, будут позже", name: "Данных нет, будут позже" },
+        // { fias: "Данных нет, будут позже", name: "Данных нет, будут позже" },
       ],
       water_intake_objects: [
-        { fias: "Данных нет, будут позже", name: "Данных нет, будут позже" },
+        // { fias: "Данных нет, будут позже", name: "Данных нет, будут позже" },
       ],
       canalization_pumping_objects: [
-        { fias: "Данных нет, будут позже", name: "Данных нет, будут позже" },
+        // { fias: "Данных нет, будут позже", name: "Данных нет, будут позже" },
       ],
       electric_lines: electricLines,
       energy_substation: energysubstation,
       transformer_station: transformerstation,
-      Involved_forces: Involveforces,
-      Required_forces: Requiredforces,
+      involved_forces: Involveforces,
+      required_forces: Requiredforces,
     };
   };
 
@@ -340,8 +340,7 @@ export default function MinEnergoSender({ tn, updateField, open, onClose }) {
         onClose();
         setTimeout(() => {
           message.success(
-            `Успешно отправлено: ${
-              typeof resBody === "string" ? resBody : JSON.stringify(resBody)
+            `Успешно отправлено: ${typeof resBody === "string" ? resBody : JSON.stringify(resBody)
             }`
           );
         }, 400);
@@ -349,8 +348,7 @@ export default function MinEnergoSender({ tn, updateField, open, onClose }) {
         onClose();
         setTimeout(() => {
           message.error(
-            `Ошибка при отправке: ${
-              typeof resBody === "string" ? resBody : JSON.stringify(resBody)
+            `Ошибка при отправке: ${typeof resBody === "string" ? resBody : JSON.stringify(resBody)
             }`
           );
         }, 400);
@@ -396,9 +394,8 @@ export default function MinEnergoSender({ tn, updateField, open, onClose }) {
             }}
           >
             {k === "DISTRICT"
-              ? `${draft[k] ?? "—"}${
-                  DISTRICT_MAP[draft[k]] ? ` (${DISTRICT_MAP[draft[k]]})` : ""
-                }`
+              ? `${draft[k] ?? "—"}${DISTRICT_MAP[draft[k]] ? ` (${DISTRICT_MAP[draft[k]]})` : ""
+              }`
               : draft[k] ?? "—"}{" "}
             {(tn[k]?.edit === "Да" || NEW_FIELDS.includes(k)) && (
               <EditOutlined
@@ -414,8 +411,8 @@ export default function MinEnergoSender({ tn, updateField, open, onClose }) {
         title={
           editing
             ? tn[editing.field]?.label ??
-              CUSTOM_LABELS[editing.field] ??
-              editing.field
+            CUSTOM_LABELS[editing.field] ??
+            editing.field
             : ""
         }
         onOk={async () => {
